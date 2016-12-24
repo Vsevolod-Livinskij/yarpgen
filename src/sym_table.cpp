@@ -31,7 +31,7 @@ void SymbolTable::add_struct (std::shared_ptr<Struct> _struct) {
 void SymbolTable::form_struct_member_expr (std::shared_ptr<MemberExpr> parent_memb_expr, std::shared_ptr<Struct> struct_var, bool ignore_const) {
     for (int j = 0; j < struct_var->get_num_of_members(); ++j) {
         GenPolicy gen_policy;
-        if (rand_val_gen->get_rand_id(gen_policy.get_member_use_prob())) {
+        if (rand_val_gen->get_rand_id(gen_policy.get_member_use_prob(), RandValGen::USE_STRUCT_MEMBER)) {
             std::shared_ptr<MemberExpr> member_expr;
             if (parent_memb_expr != NULL)
                 member_expr = std::make_shared<MemberExpr>(parent_memb_expr, j);

@@ -73,6 +73,16 @@ RandValGen::RandValGen (uint64_t _seed) {
     rand_gen = std::mt19937_64(seed);
 }
 
+std::string RandValGen::dump_all_prob () {
+    std::string ret = "@@@@@@@@@@\n";
+    for (int i = 0; i < probType::MAX_PROB_TYPE + 1; ++i) {
+        ret += probType_to_str[i] + "\n";
+        ret += stat[i].dump();
+        ret += "@@@@@@@@@@\n";
+    }
+    return ret;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 GenPolicy::GenPolicy () {
@@ -289,7 +299,8 @@ void GenPolicy::rand_init_allowed_int_types () {
     std::vector<IntegerType::IntegerTypeID> tmp_allowed_int_types;
     int gen_types = 0;
     while (gen_types < num_of_allowed_int_types) {
-        IntegerType::IntegerTypeID type = (IntegerType::IntegerTypeID) rand_val_gen->get_rand_value<int>(0, IntegerType::IntegerTypeID::MAX_INT_ID - 1);
+        IntegerType::IntegerTypeID type = (IntegerType::IntegerTypeID) rand_val_gen->get_rand_value<int>
+                (0, IntegerType::IntegerTypeID::MAX_INT_ID - 1, RandValGen::INTEGER_TYPE_NUM);
         if (std::find(tmp_allowed_int_types.begin(), tmp_allowed_int_types.end(), type) == tmp_allowed_int_types.end()) {
             tmp_allowed_int_types.push_back (type);
             gen_types++;

@@ -30,7 +30,7 @@ limitations under the License.
 #endif
 
 #ifndef BUILD_VERSION
-#define BUILD_DATE ""
+#define BUILD_VERSION "unknown"
 #endif
 
 using namespace rl;
@@ -104,6 +104,8 @@ int main (int argc, char* argv[]) {
     mas.emit_hash ();
     mas.emit_check ();
     mas.emit_main ();
+
+    std::cout << rand_val_gen->dump_all_prob() << std::endl;
 
     return 0;
 }

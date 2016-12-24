@@ -246,7 +246,7 @@ std::shared_ptr<Expr> ArithExpr::conv_to_bool (std::shared_ptr<Expr> arg) {
 GenPolicy ArithExpr::choose_and_apply_ssp_const_use (GenPolicy old_gen_policy) {
     if (old_gen_policy.get_chosen_arith_ssp_const_use () != ArithSSP::ConstUse::MAX_CONST_USE)
         return old_gen_policy;
-    ArithSSP::ConstUse arith_ssp_const_use_id = rand_val_gen->get_rand_id (old_gen_policy.get_allowed_arith_ssp_const_use());
+    ArithSSP::ConstUse arith_ssp_const_use_id = rand_val_gen->get_rand_id (old_gen_policy.get_allowed_arith_ssp_const_use(), RandValGen::ARITH_SSP_PATTERN);
 //    std::cerr << "arith_single_pattern_id: " << arith_single_pattern_id << std::endl;
     return old_gen_policy.apply_arith_ssp_const_use (arith_ssp_const_use_id);
 }
@@ -254,7 +254,7 @@ GenPolicy ArithExpr::choose_and_apply_ssp_const_use (GenPolicy old_gen_policy) {
 GenPolicy ArithExpr::choose_and_apply_ssp_similar_op (GenPolicy old_gen_policy) {
     if (old_gen_policy.get_chosen_arith_ssp_similar_op () != ArithSSP::SimilarOp::MAX_SIMILAR_OP)
         return old_gen_policy;
-    ArithSSP::SimilarOp arith_ssp_similar_op_id = rand_val_gen->get_rand_id (old_gen_policy.get_allowed_arith_ssp_similar_op());
+    ArithSSP::SimilarOp arith_ssp_similar_op_id = rand_val_gen->get_rand_id (old_gen_policy.get_allowed_arith_ssp_similar_op(), RandValGen::ARITH_SIMILAR_OP);
 //    std::cerr << "arith_single_pattern_id: " << arith_single_pattern_id << std::endl;
     return old_gen_policy.apply_arith_ssp_similar_op (arith_ssp_similar_op_id);
 }
@@ -276,17 +276,17 @@ std::shared_ptr<Expr> ArithExpr::gen_level (std::shared_ptr<Context> ctx, std::v
     std::shared_ptr<Context> new_ctx = std::make_shared<Context>(*(ctx));
     new_ctx->set_gen_policy(new_gen_policy);
 
-    GenPolicy::ArithLeafID node_type = rand_val_gen->get_rand_id (ctx->get_gen_policy()->get_arith_leaves());
+    GenPolicy::ArithLeafID node_type = rand_val_gen->get_rand_id (ctx->get_gen_policy()->get_arith_leaves(), RandValGen::ARITH_LEAVES);
     std::shared_ptr<Expr> ret = NULL;
 
     if (node_type == GenPolicy::ArithLeafID::Data || par_depth == ctx->get_gen_policy()->get_max_arith_depth() ||
        (node_type == GenPolicy::ArithLeafID::CSE && ctx->get_gen_policy()->get_cse().size() == 0)) {
-        GenPolicy::ArithDataID data_type = rand_val_gen->get_rand_id (ctx->get_gen_policy()->get_arith_data_distr());
+        GenPolicy::ArithDataID data_type = rand_val_gen->get_rand_id (ctx->get_gen_policy()->get_arith_data_distr(), RandValGen::ARITH_DATA);
         if (data_type == GenPolicy::ArithDataID::Const || inp.size() == 0) {
             ret = ConstExpr::generate(new_ctx);
         }
         else if (data_type == GenPolicy::ArithDataID::Inp) {
-            int inp_num = rand_val_gen->get_rand_value<int>(0, inp.size() - 1);
+            int inp_num = rand_val_gen->get_rand_value<int>(0, inp.size() - 1, RandValGen::INP_DATA);
             ret = inp.at(inp_num);
         }
         else {
@@ -303,11 +303,11 @@ std::shared_ptr<Expr> ArithExpr::gen_level (std::shared_ptr<Context> ctx, std::v
         ret = TypeCastExpr::generate(new_ctx, ArithExpr::gen_level(new_ctx, inp, par_depth + 1));
     }
     else if (node_type == GenPolicy::ArithLeafID::CSE) {
-        int cse_num = rand_val_gen->get_rand_value<int>(0, ctx->get_gen_policy()->get_cse().size() - 1);
+        int cse_num = rand_val_gen->get_rand_value<int>(0, ctx->get_gen_policy()->get_cse().size() - 1, RandValGen::CSE);
         ret = ctx->get_gen_policy()->get_cse().at(cse_num);
     }
     else {
-        std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": unappropriate node type in ArithExpr::gen_level" << std::endl;
+        std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": inappropriate node type in ArithExpr::gen_level" << std::endl;
         exit (-1);
     }
 //    std::cout << ret->emit() << std::endl;
@@ -316,7 +316,7 @@ std::shared_ptr<Expr> ArithExpr::gen_level (std::shared_ptr<Context> ctx, std::v
 
 
 std::shared_ptr<UnaryExpr> UnaryExpr::generate (std::shared_ptr<Context> ctx, std::vector<std::shared_ptr<Expr>> inp, int par_depth) {
-    UnaryExpr::Op op_type = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_allowed_unary_op());
+    UnaryExpr::Op op_type = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_allowed_unary_op(), RandValGen::UNARY_OP);
     std::shared_ptr<Expr> rhs = ArithExpr::gen_level (ctx, inp, par_depth);
     return std::make_shared<UnaryExpr>(op_type, rhs);
 }
@@ -487,7 +487,7 @@ std::string UnaryExpr::emit (std::string offset) {
 }
 
 std::shared_ptr<BinaryExpr> BinaryExpr::generate (std::shared_ptr<Context> ctx, std::vector<std::shared_ptr<Expr>> inp, int par_depth) {
-    BinaryExpr::Op op_type = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_allowed_binary_op());
+    BinaryExpr::Op op_type = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_allowed_binary_op(), RandValGen::BINARY_OP);
     std::shared_ptr<Expr> lhs = ArithExpr::gen_level (ctx, inp, par_depth);
     std::shared_ptr<Expr> rhs = ArithExpr::gen_level (ctx, inp, par_depth);
     std::shared_ptr<BinaryExpr> ret = std::make_shared<BinaryExpr>(op_type, lhs, rhs);

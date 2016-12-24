@@ -34,7 +34,7 @@ namespace rl {
 template<typename T>
 class Probability {
     public:
-        Probability (T _id, int _prob) : id(_id), prob (_prob) {}
+        Probability (T _id, uint64_t _prob) : id(_id), prob (_prob) {}
         T get_id () { return id; }
         uint64_t get_prob () { return prob; }
 
@@ -45,23 +45,101 @@ class Probability {
 
 class RandValGen {
     public:
+        enum probType {
+            INTEGER_TYPE_NUM,
+            TYPE_MODIFIER,
+            INTEGER_TYPE,
+            TYPE_SPECIFIER,
+            STRUCT_MEMBER_NUM,
+            STRUCT_MEMBER_TYPE,
+            NESTED_STRUCT_TYPE,
+            BIT_FIELD,
+            BIT_FIELD_SIZE,
+            VALUE,
+            ARITH_SSP_PATTERN,
+            ARITH_SIMILAR_OP,
+            ARITH_LEAVES,
+            ARITH_DATA,
+            INP_DATA,
+            CSE,
+            UNARY_OP,
+            BINARY_OP,
+            ARITH_STMT_NUM,
+            ADD_CSE,
+            STMT_TYPE,
+            MIX_INP_IN_EXPR,
+            OUT_DATA_TYPE,
+            INP_VAR_NUM,
+            MIX_VAR_NUM,
+            STRUCT_TYPE_NUM,
+            INP_STRUCT_NUM,
+            MIX_STRUCT_NUM,
+            OUT_STRUCT_NUM,
+            ELSE_BR,
+            USE_STRUCT_MEMBER,
+            CHOOSE_STRUCT_TYPE,
+            IF_DEPTH,
+            MAX_PROB_TYPE
+        };
+    private:
+        std::string probType_to_str [MAX_PROB_TYPE + 1] = {"integer type number",
+                                                           "type modifier",
+                                                           "integer type",
+                                                           "type specifier",
+                                                           "struct member number",
+                                                           "struct member type",
+                                                           "nested struct type",
+                                                           "bit field",
+                                                           "bit field size",
+                                                           "value",
+                                                           "arith ssp pattern",
+                                                           "arith similar op",
+                                                           "arith leaves type",
+                                                           "arith data type (const/inp)",
+                                                           "input data from list",
+                                                           "cse num",
+                                                           "unary op",
+                                                           "binary op",
+                                                           "stmt num",
+                                                           "add cse",
+                                                           "stmt type",
+                                                           "use mix input in expr",
+                                                           "out data type",
+                                                           "input variables number",
+                                                           "mixed variables number",
+                                                           "struct types number",
+                                                           "input struct number",
+                                                           "mixed struct number",
+                                                           "output struct number",
+                                                           "else branch",
+                                                           "use struct member",
+                                                           "choose struct type",
+                                                           "if depth",
+                                                           "max type"};
+
+    public:
         RandValGen (uint64_t _seed);
         template<typename T>
-        T get_rand_value (T from, T to) {
+        T get_rand_value (T from, T to, probType prob_type = probType::MAX_PROB_TYPE, bool ignore_tag = false) {
             std::uniform_int_distribution<T> dis(from, to);
-            return dis(rand_gen);
+            auto ret = dis(rand_gen);
+            if (!ignore_tag)
+                stat[prob_type].add(from, to, ret);
+            return ret;
         }
 
         template<typename T>
-        T get_rand_id (std::vector<Probability<T>> vec) {
+        T get_rand_id (std::vector<Probability<T>> vec, probType prob_type = probType::MAX_PROB_TYPE) {
             uint64_t max_prob = 0;
             for (auto i = vec.begin(); i != vec.end(); ++i)
                 max_prob += (*i).get_prob();
-            uint64_t rand_num = get_rand_value<uint64_t> (0, max_prob);
-            for (auto i = vec.begin(); i != vec.end(); ++i) {
-                max_prob -= (*i).get_prob();
-                if (rand_num >= max_prob)
-                    return (*i).get_id();
+            uint64_t rand_num = get_rand_value<uint64_t> (0, max_prob, MAX_PROB_TYPE, true);
+            for (int64_t i = vec.size() - 1; i >= 0; --i) {
+                max_prob -= vec.at(i).get_prob();
+                if (rand_num >= max_prob) {
+                    stat[prob_type].add(0UL, vec.size() - 1, (ulong) i);
+                    return vec.at(i).get_id();
+                }
             }
             std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": unable to select any id." << std::endl;
             exit (-1);
@@ -72,12 +150,52 @@ class RandValGen {
         std::string get_scalar_var_name() { return "var_" + std::to_string(++scalar_var_num); }
         std::string get_struct_var_name() { return "struct_obj_" + std::to_string(++struct_var_num); }
 
+        std::string dump_all_prob ();
+        template <typename T>
+        void add_stat_prob (probType prob_type, T min, T max, T res) {
+            stat[prob_type].add(min, max, res);
+        }
+
     private:
         uint64_t seed;
         std::mt19937_64 rand_gen;
         static uint64_t struct_type_num;
         static uint64_t scalar_var_num;
         static uint64_t struct_var_num;
+
+        struct RandStat {
+            RandStat () : num(0) {}
+
+            template <typename T>
+            void add (T min, T max, T res) {
+                max -= min;
+                res -= min;
+                stat.push_back((max == 0) ? 1 : ((double) res / max));
+                num++;
+            }
+
+            std::vector<double> stat;
+            uint64_t num;
+
+            std::string dump () {
+                double average = 0;
+                for (auto i = stat.begin(); i != stat.end(); ++i)
+                    average += *i;
+                average /= num;
+                double deviation = 0;
+                for (auto &&i : stat) {
+                    deviation += pow(average - i, 2);
+                }
+                deviation /= num;
+                deviation = sqrt(deviation);
+                std::string ret = "\tcalls: " + std::to_string(num) + "\n";
+                ret += "\taverage: " + std::to_string(average) + "\n";
+                ret += "\tdeviation: " + std::to_string(deviation) + "\n";
+                return ret;
+            }
+        };
+
+        std::array<RandStat, probType::MAX_PROB_TYPE + 1> stat = {};
 };
 
 extern std::shared_ptr<RandValGen> rand_val_gen;
@@ -132,7 +250,7 @@ class GenPolicy {
         std::vector<Probability<IntegerType::IntegerTypeID>>& get_allowed_int_types () { return allowed_int_types; }
         void add_allowed_int_type (Probability<IntegerType::IntegerTypeID> allowed_int_type) { allowed_int_types.push_back(allowed_int_type); }
 
-        // TODO: Add check for options compability? Should allow_volatile + allow_const be equal to allow_const_volatile?
+        // TODO: Add check for options compatibility? Should allow_volatile + allow_const be equal to allow_const_volatile?
         void set_allow_volatile (bool _allow_volatile) { set_modifier (_allow_volatile, Type::Mod::VOLAT); }
         bool get_allow_volatile () { return get_modifier (Type::Mod::VOLAT); }
         void set_allow_const (bool _allow_const) { set_modifier (_allow_const, Type::Mod::CONST); }

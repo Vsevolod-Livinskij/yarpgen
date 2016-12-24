@@ -99,23 +99,23 @@ std::shared_ptr<ScopeStmt> ScopeStmt::generate (std::shared_ptr<Context> ctx) {
     std::vector<std::shared_ptr<Expr>> cse_inp = form_const_inp_from_ctx(ctx);
 
     //TODO: add to gen_policy stmt number
-    int arith_stmt_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_arith_stmt_num(), ctx->get_gen_policy()->get_max_arith_stmt_num());
+    int arith_stmt_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_arith_stmt_num(), ctx->get_gen_policy()->get_max_arith_stmt_num(), RandValGen::ARITH_STMT_NUM);
     for (int i = 0; i < arith_stmt_num; ++i) {
-        GenPolicy::ArithCSEGenID add_cse = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_arith_cse_gen());
+        GenPolicy::ArithCSEGenID add_cse = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_arith_cse_gen(), RandValGen::ADD_CSE);
         if (add_cse == GenPolicy::ArithCSEGenID::Add &&
            ((ctx->get_gen_policy()->get_cse().size() - 1 < ctx->get_gen_policy()->get_max_cse_num()) ||
             (ctx->get_gen_policy()->get_cse().size() == 0))) {
             ctx->get_gen_policy()->add_cse(ArithExpr::generate(ctx, cse_inp));
         }
 
-        Node::NodeID gen_id = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_stmt_gen_prob());
+        Node::NodeID gen_id = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_stmt_gen_prob(), RandValGen::STMT_TYPE);
         if (gen_id == Node::NodeID::EXPR) {
             //TODO: add to gen_policy
-            bool use_mix = rand_val_gen->get_rand_value<int>(0, 1);
-            GenPolicy::OutDataTypeID out_rata_type = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_out_data_type_prob());
+            bool use_mix = rand_val_gen->get_rand_value<int>(0, 1, RandValGen::MIX_INP_IN_EXPR);
+            GenPolicy::OutDataTypeID out_data_type = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_out_data_type_prob(), RandValGen::OUT_DATA_TYPE);
             std::shared_ptr<Expr> assign_lhs = NULL;
             if (use_mix) {
-                if (out_rata_type == GenPolicy::OutDataTypeID::VAR || ctx->get_extern_mix_sym_table()->get_avail_members().size() == 0) {
+                if (out_data_type == GenPolicy::OutDataTypeID::VAR || ctx->get_extern_mix_sym_table()->get_avail_members().size() == 0) {
                     int mix_num = rand_val_gen->get_rand_value<int>(0, ctx->get_extern_mix_sym_table()->get_variables().size() - 1);
                     assign_lhs = std::make_shared<VarUseExpr>(ctx->get_extern_mix_sym_table()->get_variables().at(mix_num));
                 }
@@ -125,7 +125,7 @@ std::shared_ptr<ScopeStmt> ScopeStmt::generate (std::shared_ptr<Context> ctx) {
                 }
             }
             else {
-                if (out_rata_type == GenPolicy::OutDataTypeID::VAR || ctx->get_extern_out_sym_table()->get_avail_members().size() == 0) {
+                if (out_data_type == GenPolicy::OutDataTypeID::VAR || ctx->get_extern_out_sym_table()->get_avail_members().size() == 0) {
                     std::shared_ptr<ScalarVariable> out_var = ScalarVariable::generate(ctx);
                     ctx->get_extern_out_sym_table()->add_variable (out_var);
                     assign_lhs = std::make_shared<VarUseExpr>(out_var);
@@ -181,7 +181,7 @@ std::vector<std::shared_ptr<Expr>> ScopeStmt::form_inp_from_ctx (std::shared_ptr
 }
 
 void ScopeStmt::form_extern_sym_table(std::shared_ptr<Context> ctx) {
-    int inp_var_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_inp_var_num(), ctx->get_gen_policy()->get_max_inp_var_num());
+    int inp_var_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_inp_var_num(), ctx->get_gen_policy()->get_max_inp_var_num(), RandValGen::INP_VAR_NUM);
     std::shared_ptr<Context> const_ctx = std::make_shared<Context>(*(ctx));
     GenPolicy const_gen_policy = *(const_ctx->get_gen_policy());
     const_gen_policy.set_allow_const(true);
@@ -190,12 +190,12 @@ void ScopeStmt::form_extern_sym_table(std::shared_ptr<Context> ctx) {
         ctx->get_extern_inp_sym_table()->add_variable(ScalarVariable::generate(const_ctx));
     }
     //TODO: add to gen_policy
-    int mix_var_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_mix_var_num(), ctx->get_gen_policy()->get_max_mix_var_num());
+    int mix_var_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_mix_var_num(), ctx->get_gen_policy()->get_max_mix_var_num(), RandValGen::MIX_VAR_NUM);
     for (int i = 0; i < mix_var_num; ++i) {
         ctx->get_extern_mix_sym_table()->add_variable(ScalarVariable::generate(ctx));
     }
 
-    int struct_types_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_struct_types_num(), ctx->get_gen_policy()->get_max_struct_types_num());
+    int struct_types_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_struct_types_num(), ctx->get_gen_policy()->get_max_struct_types_num(), RandValGen::STRUCT_TYPE_NUM);
     for (int i = 0; i < struct_types_num; ++i) {
         //TODO: Maybe we should create one container for all struct types? And should they all be equal?
         std::shared_ptr<StructType> struct_type = StructType::generate(ctx, ctx->get_extern_inp_sym_table()->get_struct_types());
@@ -204,19 +204,19 @@ void ScopeStmt::form_extern_sym_table(std::shared_ptr<Context> ctx) {
         ctx->get_extern_mix_sym_table()->add_struct_type(struct_type);
     }
 
-    int inp_struct_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_inp_struct_num(), ctx->get_gen_policy()->get_max_inp_struct_num());
+    int inp_struct_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_inp_struct_num(), ctx->get_gen_policy()->get_max_inp_struct_num(), RandValGen::INP_STRUCT_NUM);
     for (int i = 0; i < inp_struct_num; ++i) {
-        int struct_type_indx = rand_val_gen->get_rand_value<int>(0, struct_types_num - 1);
+        int struct_type_indx = rand_val_gen->get_rand_value<int>(0, struct_types_num - 1, RandValGen::CHOOSE_STRUCT_TYPE);
         ctx->get_extern_inp_sym_table()->add_struct(Struct::generate(const_ctx, ctx->get_extern_inp_sym_table()->get_struct_types().at(struct_type_indx)));
-    }
-    int mix_struct_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_mix_struct_num(), ctx->get_gen_policy()->get_max_mix_struct_num());
+  }
+    int mix_struct_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_mix_struct_num(), ctx->get_gen_policy()->get_max_mix_struct_num(), RandValGen::MIX_STRUCT_NUM);
     for (int i = 0; i < mix_struct_num; ++i) {
-        int struct_type_indx = rand_val_gen->get_rand_value<int>(0, struct_types_num - 1);
+        int struct_type_indx = rand_val_gen->get_rand_value<int>(0, struct_types_num - 1, RandValGen::CHOOSE_STRUCT_TYPE);
         ctx->get_extern_mix_sym_table()->add_struct(Struct::generate(ctx, ctx->get_extern_mix_sym_table()->get_struct_types().at(struct_type_indx)));
     }
-    int out_struct_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_out_struct_num(), ctx->get_gen_policy()->get_max_out_struct_num());
+    int out_struct_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_out_struct_num(), ctx->get_gen_policy()->get_max_out_struct_num(), RandValGen::OUT_STRUCT_NUM);
     for (int i = 0; i < out_struct_num; ++i) {
-        int struct_type_indx = rand_val_gen->get_rand_value<int>(0, struct_types_num - 1);
+        int struct_type_indx = rand_val_gen->get_rand_value<int>(0, struct_types_num - 1, RandValGen::CHOOSE_STRUCT_TYPE);
         ctx->get_extern_out_sym_table()->add_struct(Struct::generate(ctx, ctx->get_extern_out_sym_table()->get_struct_types().at(struct_type_indx)));
     }
 }
@@ -249,7 +249,7 @@ bool IfStmt::count_if_taken (std::shared_ptr<Expr> cond) {
 IfStmt::IfStmt (std::shared_ptr<Expr> _cond, std::shared_ptr<ScopeStmt> _if_br, std::shared_ptr<ScopeStmt> _else_br) :
                 Stmt(Node::NodeID::IF), cond(_cond), if_branch(_if_br), else_branch(_else_br) {
     if (cond == NULL || if_branch == NULL) {
-        std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": if branchescan't be empty in IfStmt::IfStmt" << std::endl;
+        std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": if branches can't be empty in IfStmt::IfStmt" << std::endl;
         exit(-1);
     }
     taken = count_if_taken(cond);
@@ -257,9 +257,10 @@ IfStmt::IfStmt (std::shared_ptr<Expr> _cond, std::shared_ptr<ScopeStmt> _if_br, 
 
 std::shared_ptr<IfStmt> IfStmt::generate (std::shared_ptr<Context> ctx, std::vector<std::shared_ptr<Expr>> inp) {
     std::shared_ptr<Expr> cond = ArithExpr::generate(ctx, inp);
-    bool else_exist = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_else_prob());
+    bool else_exist = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_else_prob(), RandValGen::ELSE_BR);
     bool cond_taken = IfStmt::count_if_taken(cond);
     std::shared_ptr<ScopeStmt> then_br = ScopeStmt::generate(std::make_shared<Context>(*(ctx->get_gen_policy()), ctx, Node::NodeID::SCOPE, cond_taken));
+    rand_val_gen->add_stat_prob(RandValGen::IF_DEPTH, 0, ctx->get_gen_policy()->get_max_if_depth(), ctx->get_if_depth());
     std::shared_ptr<ScopeStmt> else_br = NULL;
     if (else_exist)
         else_br = ScopeStmt::generate(std::make_shared<Context>(*(ctx->get_gen_policy()), ctx, Node::NodeID::SCOPE, !cond_taken));
