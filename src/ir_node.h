@@ -49,6 +49,11 @@ class Node {
             IF,
 //            BREAK,
 //            CONTINUE,
+            R_INIT_STMT_NVC,
+            CMNT,
+            LHDR,
+            FOR_EACH,
+            STUB_STR,
             MAX_STMT_ID
         };
         Node (NodeID _id) : id(_id) {}

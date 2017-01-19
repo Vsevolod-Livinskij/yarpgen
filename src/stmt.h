@@ -45,6 +45,7 @@ class DeclStmt : public Stmt {
     private:
         std::shared_ptr<Data> data;
         std::shared_ptr<Expr> init;
+    protected:
         bool is_extern;
 };
 
@@ -84,5 +85,14 @@ class IfStmt : public Stmt {
         std::shared_ptr<Expr> cond;
         std::shared_ptr<ScopeStmt> if_branch;
         std::shared_ptr<ScopeStmt> else_branch;
+};
+
+class StubStmt : public Stmt {
+    protected:
+        std::string stub_string;
+
+    public:
+        StubStmt(std::string s_) : Stmt(Node::NodeID::STUB_STR) { this->stub_string = s_; }
+        virtual std::string emit (std::string offset = "")  {return offset + this->stub_string; }
 };
 }

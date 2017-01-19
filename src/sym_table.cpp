@@ -177,6 +177,7 @@ Context::Context (GenPolicy _gen_policy, std::shared_ptr<Context> _parent_ctx, N
     if_depth = 0;
     self_stmt_id = _self_stmt_id;
     taken = _taken;
+    verbose_level = 42;
 
     if (parent_ctx != NULL) {
         extern_inp_sym_table = parent_ctx->get_extern_inp_sym_table ();
@@ -188,5 +189,7 @@ Context::Context (GenPolicy _gen_policy, std::shared_ptr<Context> _parent_ctx, N
         //TODO: It should be parent of scope statement
         if (parent_ctx->get_self_stmt_id() == Node::NodeID::IF)
             if_depth++;
+
+        verbose_level = parent_ctx->get_verbose_level();
     }
 }

@@ -93,6 +93,9 @@ class Context {
         void setScopeId (uint64_t id_) { this->scope_id = id_; }
         uint64_t getScopeId () { return this->scope_id; }
 
+        void set_verbose_level (uint32_t level) { this->verbose_level = level; }
+        uint32_t get_verbose_level () { return this->verbose_level; }
+
     private:
         std::shared_ptr<GenPolicy> gen_policy;
 
@@ -108,6 +111,7 @@ class Context {
         int if_depth;
         int depth;
         bool taken;
+        uint32_t verbose_level;
         //TODO: maybe we should add taken member?
 };
 }

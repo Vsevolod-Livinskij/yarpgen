@@ -203,6 +203,7 @@ GenPolicy::GenPolicy () {
 
     min_arr_size = MIN_ARR_SIZE;
     max_arr_size = MAX_ARR_SIZE;
+
     Probability<VecElem::Kind> c_arr (VecElem::Kind::C_ARR, 30);
     arr_kind.push_back(c_arr);
     Probability<VecElem::Kind> std_vec (VecElem::Kind::STD_VEC, 10);
@@ -211,6 +212,8 @@ GenPolicy::GenPolicy () {
     arr_kind.push_back(std_varr);
     Probability<VecElem::Kind> std_arr (VecElem::Kind::STD_ARR, 10);
     arr_kind.push_back(std_arr);
+
+    loop_unknown_e_prob = 70;
 }
 
 void GenPolicy::copy_data (std::shared_ptr<GenPolicy> old) {
@@ -334,4 +337,13 @@ void GenPolicy::set_modifier (bool value, Type::Mod modifier) {
 
 bool GenPolicy::get_modifier (Type::Mod modifier) {
     return (std::find(allowed_modifiers.begin(), allowed_modifiers.end(), modifier) != allowed_modifiers.end());
+}
+
+bool GenPolicy::do_loop_unknown_end() {
+    if (loop_unknown_e_prob <= 0) return false;
+    if (loop_unknown_e_prob >= 100) return true;
+    std::vector<Probability<bool>> decisions;
+    decisions.push_back(Probability<bool>(true, loop_unknown_e_prob));
+    decisions.push_back(Probability<bool>(false, 100 - loop_unknown_e_prob));
+    return rand_val_gen->get_rand_id(decisions);
 }
