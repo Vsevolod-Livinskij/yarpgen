@@ -54,6 +54,9 @@ int MAX_STRUCT_DEPTH = 5;
 int MIN_BIT_FIELD_SIZE = 8;
 int MAX_BIT_FIELD_SIZE = 2;
 
+int MIN_ARR_SIZE = 100;
+int MAX_ARR_SIZE = 5000;
+
 ///////////////////////////////////////////////////////////////////////////////
 
 std::shared_ptr<RandValGen> rl::rand_val_gen;
@@ -197,10 +200,31 @@ GenPolicy::GenPolicy () {
     else_prob.push_back(no_else);
 
     max_if_depth = MAX_IF_DEPTH;
+
+    min_arr_size = MIN_ARR_SIZE;
+    max_arr_size = MAX_ARR_SIZE;
+    Probability<VecElem::Kind> c_arr (VecElem::Kind::C_ARR, 30);
+    arr_kind.push_back(c_arr);
+    Probability<VecElem::Kind> std_vec (VecElem::Kind::STD_VEC, 10);
+    arr_kind.push_back(std_vec);
+    Probability<VecElem::Kind> std_varr (VecElem::Kind::STD_VARR, 10);
+    arr_kind.push_back(std_varr);
+    Probability<VecElem::Kind> std_arr (VecElem::Kind::STD_ARR, 10);
+    arr_kind.push_back(std_arr);
 }
 
 void GenPolicy::copy_data (std::shared_ptr<GenPolicy> old) {
     cse = old->get_cse();
+}
+
+int GenPolicy::get_access_type_score (VecElem::AccessKind knd_) {
+    switch (knd_) {
+        case VecElem::AccessKind::REGULAR : return 10;
+        case VecElem::AccessKind::AT : return 10;
+        case VecElem::AccessKind::PTR : return 10;
+        case VecElem::AccessKind::ITERPTR : return 10;
+    }
+    return 0;
 }
 
 GenPolicy GenPolicy::apply_arith_ssp_const_use (ArithSSP::ConstUse pattern_id) {

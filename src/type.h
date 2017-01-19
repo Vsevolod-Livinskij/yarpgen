@@ -184,8 +184,8 @@ class AtomicType : public Type {
                 void set_abs_val (uint64_t new_val);
 
                 ScalarTypedVal cast_type (Type::IntegerTypeID to_type_id);
-                ScalarTypedVal operator++ (int) { return pre_op(true ); } // Postfix, but uzed also as prefix
-                ScalarTypedVal operator-- (int) { return pre_op(false); }// Postfix, but uzed also as prefix
+                ScalarTypedVal operator++ (int) { return pre_op(true ); } // Postfix, but used also as prefix
+                ScalarTypedVal operator-- (int) { return pre_op(false); }// Postfix, but used also as prefix
                 ScalarTypedVal operator- ();
                 ScalarTypedVal operator~ ();
                 ScalarTypedVal operator! ();

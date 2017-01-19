@@ -90,6 +90,9 @@ class Context {
         void set_local_sym_table (std::shared_ptr<SymbolTable> _lst) { local_sym_table = _lst; }
         std::shared_ptr<Context> get_parent_ctx () { return parent_ctx; }
 
+        void setScopeId (uint64_t id_) { this->scope_id = id_; }
+        uint64_t getScopeId () { return this->scope_id; }
+
     private:
         std::shared_ptr<GenPolicy> gen_policy;
 
@@ -101,6 +104,7 @@ class Context {
         std::shared_ptr<Context> parent_ctx;
         std::shared_ptr<SymbolTable> local_sym_table;
         Node::NodeID self_stmt_id;
+        uint64_t scope_id;
         int if_depth;
         int depth;
         bool taken;
