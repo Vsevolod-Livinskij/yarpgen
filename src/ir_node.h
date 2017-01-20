@@ -54,6 +54,7 @@ class Node {
             LHDR,
             FOR_EACH,
             STUB_STR,
+            LBB,
             MAX_STMT_ID
         };
         Node (NodeID _id) : id(_id) {}

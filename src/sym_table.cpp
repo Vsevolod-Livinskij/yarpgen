@@ -178,6 +178,8 @@ Context::Context (GenPolicy _gen_policy, std::shared_ptr<Context> _parent_ctx, N
     self_stmt_id = _self_stmt_id;
     taken = _taken;
     verbose_level = 42;
+    loop_depth = 0;
+    complexity = 0;
 
     if (parent_ctx != NULL) {
         extern_inp_sym_table = parent_ctx->get_extern_inp_sym_table ();
@@ -191,5 +193,15 @@ Context::Context (GenPolicy _gen_policy, std::shared_ptr<Context> _parent_ctx, N
             if_depth++;
 
         verbose_level = parent_ctx->get_verbose_level();
+
+        loop_depth = parent_ctx->get_loop_depth();
+        complexity = parent_ctx->get_complexity();
+    }
+}
+
+void Context::add_to_complexity (unsigned long long diff) {
+    this->complexity += diff;
+    if (this->parent_ctx.use_count() != 0) {
+        this->parent_ctx->add_to_complexity(diff);
     }
 }

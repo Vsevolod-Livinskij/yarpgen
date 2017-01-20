@@ -96,6 +96,11 @@ class Context {
         void set_verbose_level (uint32_t level) { this->verbose_level = level; }
         uint32_t get_verbose_level () { return this->verbose_level; }
 
+        int get_loop_depth () { return loop_depth; }
+        void inc_loop_depth () { this->loop_depth += 1; }
+        unsigned long long get_complexity ()  {return this->complexity; }
+        void add_to_complexity (unsigned long long diff);
+
     private:
         std::shared_ptr<GenPolicy> gen_policy;
 
@@ -112,6 +117,8 @@ class Context {
         int depth;
         bool taken;
         uint32_t verbose_level;
+        unsigned long long complexity;
+        int loop_depth;
         //TODO: maybe we should add taken member?
 };
 }
