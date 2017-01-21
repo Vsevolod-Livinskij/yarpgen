@@ -56,6 +56,8 @@ int MAX_BIT_FIELD_SIZE = 2;
 
 int MIN_ARR_SIZE = 100;
 int MAX_ARR_SIZE = 5000;
+int MIN_ARR_NUM = 2;
+int MAX_ARR_NUM = 8;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -140,12 +142,14 @@ GenPolicy::GenPolicy () {
         allowed_binary_op.push_back (prob);
     }
 
-    Probability<Node::NodeID> decl_gen (Node::NodeID::DECL, 10);
+    Probability<Node::NodeID> decl_gen (Node::NodeID::DECL, 0);
     stmt_gen_prob.push_back (decl_gen);
-    Probability<Node::NodeID> assign_gen (Node::NodeID::EXPR, 10);
+    Probability<Node::NodeID> assign_gen (Node::NodeID::EXPR, 0);
     stmt_gen_prob.push_back (assign_gen);
-    Probability<Node::NodeID> if_gen (Node::NodeID::IF, 10);
+    Probability<Node::NodeID> if_gen (Node::NodeID::IF, 0);
     stmt_gen_prob.push_back (if_gen);
+    Probability<Node::NodeID> loop (Node::NodeID::LBB, 100);
+    stmt_gen_prob.push_back(loop);
 
     Probability<ArithLeafID> data_leaf (ArithLeafID::Data, 10);
     arith_leaves.push_back (data_leaf);
@@ -203,6 +207,8 @@ GenPolicy::GenPolicy () {
 
     min_arr_size = MIN_ARR_SIZE;
     max_arr_size = MAX_ARR_SIZE;
+    min_arr_num = MIN_ARR_NUM;
+    max_arr_num = MAX_ARR_NUM;
 
     Probability<VecElem::Kind> c_arr (VecElem::Kind::C_ARR, 30);
     arr_kind.push_back(c_arr);

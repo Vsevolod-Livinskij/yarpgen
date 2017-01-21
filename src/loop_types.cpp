@@ -44,7 +44,6 @@ IterVar::IterVar (std::shared_ptr<GenPolicy> gen_policy)
     this->set_min(init_variable->get_min());
     this->set_max(init_variable->get_max());
     this->set_init_value(init_variable->get_init_value());
-    this->set_cur_value(init_variable->get_cur_value());
 }
 
 

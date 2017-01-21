@@ -34,6 +34,7 @@ void Master::generate () {
     ctx.set_extern_inp_sym_table (extern_inp_sym_table);
     ctx.set_extern_mix_sym_table (extern_mix_sym_table);
     ctx.set_extern_out_sym_table (extern_out_sym_table);
+    ctx.set_verbose_level(0);
 
     program = ScopeStmt::generate(std::make_shared<Context>(ctx));
 }
@@ -57,11 +58,15 @@ std::string Master::emit_init () {
     ret += extern_out_sym_table->emit_struct_def() + "\n\n";
     //TODO: what if we extand struct types in mix_sym_table and out_sym_table
     ret += extern_inp_sym_table->emit_struct_type_static_memb_def() + "\n\n";
+    ret += extern_inp_sym_table->emit_array_def() + "\n\n";
+    ret += extern_out_sym_table->emit_array_def() + "\n\n";
 
     ret += "void init () {\n";
     ret += extern_inp_sym_table->emit_struct_init ("    ");
     ret += extern_mix_sym_table->emit_struct_init ("    ");
     ret += extern_out_sym_table->emit_struct_init ("    ");
+    ret += extern_inp_sym_table->emit_array_init ("    ");
+    ret += extern_out_sym_table->emit_array_init ("    ");
     ret += "}";
 
     write_file("init.cpp", ret);
@@ -89,6 +94,9 @@ std::string Master::emit_decl () {
     ret += extern_inp_sym_table->emit_struct_extern_decl() + "\n\n";
     ret += extern_mix_sym_table->emit_struct_extern_decl() + "\n\n";
     ret += extern_out_sym_table->emit_struct_extern_decl() + "\n\n";
+
+    ret += extern_inp_sym_table->emit_array_extern_decl() + "\n\n";
+    ret += extern_out_sym_table->emit_array_extern_decl() + "\n\n";
 
     write_file("init.h", ret);
     return ret;
@@ -122,7 +130,7 @@ std::string Master::emit_check () { // TODO: rewrite with IR
     std::shared_ptr<ScalarVariable> seed = std::make_shared<ScalarVariable>("seed", IntegerType::init(Type::IntegerTypeID::ULLINT));
     std::shared_ptr<VarUseExpr> seed_use = std::make_shared<VarUseExpr>(seed);
 
-    AtomicType::ScalarTypedVal zero_init (IntegerType::IntegerTypeID::ULLINT);
+    AtomicType::ScalarTypedVal zero_init (Type::IntegerTypeID::ULLINT);
     zero_init.val.ullint_val = 0;
     std::shared_ptr<ConstExpr> const_init = std::make_shared<ConstExpr> (zero_init);
 
@@ -135,6 +143,8 @@ std::string Master::emit_check () { // TODO: rewrite with IR
 
     ret += extern_mix_sym_table->emit_struct_check ("    ");
     ret += extern_out_sym_table->emit_struct_check ("    ");
+
+    ret += extern_out_sym_table->emit_array_check ("    ");
 
     ret += "    return seed;\n";
     ret += "}";

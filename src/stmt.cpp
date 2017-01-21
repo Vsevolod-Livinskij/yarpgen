@@ -18,6 +18,8 @@ limitations under the License.
 
 #include "stmt.h"
 #include "sym_table.h"
+#include "loop_stmt.h"
+#include "lbbuilder.h"
 
 using namespace rl;
 
@@ -147,6 +149,19 @@ std::shared_ptr<ScopeStmt> ScopeStmt::generate (std::shared_ptr<Context> ctx) {
         else if (gen_id == Node::NodeID::IF) {
             ret->add_stmt(IfStmt::generate(std::make_shared<Context>(*(ctx->get_gen_policy()), ctx, Node::NodeID::IF, true), inp));
         }
+        else if (gen_id == Node::NodeID::LBB) {
+            std::vector<std::shared_ptr<Vector>> vectors;
+            for (auto vec : ctx->get_extern_inp_sym_table()->get_arrays())
+                    vectors.push_back(vec);
+
+            for (auto vec : ctx->get_extern_out_sym_table()->get_arrays())
+                    vectors.push_back(vec);
+            ret->add_stmt(std::make_shared<LBBuilder>(ctx, vectors));
+
+            //TODO: it was in old crosschain. Do we still need it? //LOOP_MERGE
+            //for (auto st : this->scope)
+            //    st->local_sym_table = std::make_shared<SymbolTable>(this->local_sym_table);
+        }
 
     }
     return ret;
@@ -218,6 +233,20 @@ void ScopeStmt::form_extern_sym_table(std::shared_ptr<Context> ctx) {
     for (int i = 0; i < out_struct_num; ++i) {
         int struct_type_indx = rand_val_gen->get_rand_value<int>(0, struct_types_num - 1);
         ctx->get_extern_out_sym_table()->add_struct(Struct::generate(ctx, ctx->get_extern_out_sym_table()->get_struct_types().at(struct_type_indx)));
+    }
+
+    int inp_arr_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_array_num(), ctx->get_gen_policy()->get_max_array_num());
+    for (int i = 0; i < inp_arr_num; ++i) {
+        std::shared_ptr<VectorDeclStmt> new_vec = std::make_shared<VectorDeclStmt>(ctx);
+        new_vec->setPurpose(VecElem::Purpose::RONLY);
+        ctx->get_extern_inp_sym_table()->add_array_decl(new_vec);
+    }
+
+    int out_arr_num = rand_val_gen->get_rand_value<int>(ctx->get_gen_policy()->get_min_array_num(), ctx->get_gen_policy()->get_max_array_num());
+    for (int i = 0; i < out_arr_num; ++i) {
+        std::shared_ptr<VectorDeclStmt> new_vec = std::make_shared<VectorDeclStmt>(ctx);
+        new_vec->setPurpose(VecElem::Purpose::WONLY);
+        ctx->get_extern_out_sym_table()->add_array_decl(new_vec);
     }
 }
 

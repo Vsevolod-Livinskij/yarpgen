@@ -193,6 +193,8 @@ class GenPolicy {
 
         uint64_t get_min_array_size () { return min_arr_size; }
         uint64_t get_max_array_size () { return max_arr_size; }
+        uint64_t get_min_array_num () { return min_arr_num; }
+        uint64_t get_max_array_num () { return max_arr_num; }
         std::vector<Probability<VecElem::Kind>> get_arr_kind_prob () { return arr_kind; }
         int get_access_type_score (VecElem::AccessKind knd_);
         bool do_loop_unknown_end();
@@ -267,6 +269,8 @@ class GenPolicy {
 
         uint64_t min_arr_size;
         uint64_t max_arr_size;
+        uint64_t min_arr_num;
+        uint64_t max_arr_num;
         std::vector<Probability<VecElem::Kind>> arr_kind;
         int loop_unknown_e_prob;
 };

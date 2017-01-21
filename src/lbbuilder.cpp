@@ -152,7 +152,11 @@ void LBBuilder::generate (std::vector<std::shared_ptr<Vector>> input) {
     }
 
     int step = rand_val_gen->get_rand_value<uint64_t>(1, 1 + std::min(core_vec->size()/4, (uint64_t)100));
-
+    {
+        std::stringstream ss;
+        ss << "Step: " << std::to_string(step);
+        this->add(std::make_shared<CommentStmt>(this->context, ss.str(), 1));
+    }
     std::shared_ptr<IterDeclStmt> core_it = this->genCoreIter(core_vec, step, 0); // this sets up a tripcount
     std::shared_ptr<HeaderStmt> hdr = std::make_shared<HeaderStmt>(this->context, core_it, this->tripcount);
     this->add(hdr); // Add header to the tree

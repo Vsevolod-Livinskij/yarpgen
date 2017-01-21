@@ -19,6 +19,7 @@ limitations under the License.
 #include <cassert>
 
 #include "sym_table.h"
+#include "loop_stmt.h"
 
 using namespace rl;
 
@@ -167,6 +168,52 @@ std::string SymbolTable::emit_variable_check (std::string offset) {
         ret += offset + "hash(seed, " + (*i)->get_name() + ");\n";
     }
     return ret;
+}
+
+std::shared_ptr<Vector> SymbolTable::get_rand_array () {
+    int indx = rand_val_gen->get_rand_value<int>(0, array.size() - 1);
+    return array.at(indx)->get_data();
+}
+
+std::vector<std::shared_ptr<Vector>> SymbolTable::get_arrays () {
+    std::vector<std::shared_ptr<Vector>> ret;
+    for (auto v : this->array) ret.push_back(v->get_data());
+    return ret;
+}
+
+std::string SymbolTable::emit_array_def (std::string offset) {
+    std::stringstream ss;
+    for (auto vdecl : this->array)
+        ss << vdecl->emit(offset) << std::endl;
+    return ss.str();
+}
+
+std::string SymbolTable::emit_array_extern_decl (std::string offset) {
+    std::stringstream ss;
+    for (auto vdecl : this->array) {
+        vdecl->set_is_extern(true);
+        ss << vdecl->emit(offset) << std::endl;
+        vdecl->set_is_extern(false);
+    }
+    return ss.str();
+}
+
+std::string SymbolTable::emit_array_init (std::string offset) {
+    std::stringstream ss;
+    for (auto vdecl : this->array)
+        ss << vdecl->getInitStmt()->emit(offset) << std::endl;
+    return ss.str();
+}
+
+std::string SymbolTable::emit_array_check (std::string offset) {
+    std::stringstream ss;
+    for (auto vdecl : this->array) {
+        ForEachStmt simple_loop(vdecl->get_data());
+        simple_loop.add_single_stmt(std::make_shared<StubStmt>
+            ("hash(seed, " + simple_loop.getVar()->get_name() + ");\n"));
+        ss << simple_loop.emit(offset);
+    }
+    return ss.str();
 }
 
 Context::Context (GenPolicy _gen_policy, std::shared_ptr<Context> _parent_ctx, Node::NodeID _self_stmt_id, bool _taken) {
