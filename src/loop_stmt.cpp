@@ -66,6 +66,7 @@ IterDeclStmt::IterDeclStmt (std::shared_ptr<Context> ctx, IntegerType::IntegerTy
     this->data = std::make_shared<IterVar>(ty_);
     this->data->setStep(ctx, step_);
     this->init = in_;
+    data->set_init_value(std::static_pointer_cast<ScalarVariable>(init->getExprPtr()->get_value())->get_cur_value());
 }
 
 
@@ -82,6 +83,7 @@ IterDeclStmt::IterDeclStmt (std::shared_ptr<Context> ctx, std::string n_, Intege
     this->data = std::make_shared<IterVar>(n_, ty_);
     this->data->setStep(ctx, step_);
     this->init = in_;
+    data->set_init_value(std::static_pointer_cast<ScalarVariable>(init->getExprPtr()->get_value())->get_cur_value());
 }
 
 
@@ -91,6 +93,7 @@ IterDeclStmt::IterDeclStmt (std::shared_ptr<Context> ctx, int64_t step_)
     this->data->setStep(ctx, step_);
     //TODO: What about init value and type of data? //LOOP_MERGE
     this->init = std::make_shared<IDX>(rand_val_gen->get_rand_value<int64_t>(0, 100));
+    data->set_init_value(std::static_pointer_cast<ScalarVariable>(init->getExprPtr()->get_value())->get_cur_value());
 }
 
 
@@ -99,6 +102,7 @@ IterDeclStmt::IterDeclStmt (std::shared_ptr<Context> ctx, int64_t step_, std::sh
     this->data = std::make_shared<IterVar>(ctx->get_gen_policy());
     this->data->setStep(ctx, step_);
     this->init = in_;
+    data->set_init_value(std::static_pointer_cast<ScalarVariable>(init->getExprPtr()->get_value())->get_cur_value());
 }
 
 

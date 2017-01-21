@@ -94,7 +94,7 @@ private:
     void add_me_some_oscls(std::shared_ptr<Vector> v_in);
 
 public:
-    uint64_t get_complexity_multiplier () {return this->complexity_multiplier; }
+    uint64_t get_complexity_multiplier () { return this->complexity_multiplier; }
     LBBuilder (std::shared_ptr<Context> ctx, std::vector<std::shared_ptr<Vector>> input);
     LBBuilder (LBBuilder *p, std::vector<std::shared_ptr<Vector>> input);
     virtual std::string emit (std::string offset = "");

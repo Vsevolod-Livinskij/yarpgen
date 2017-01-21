@@ -21,6 +21,10 @@ using namespace rl;
 
 IDX::IDX (int64_t i) {
     this->shift = i;
+    //LOOP_MERGE
+    it = NULL;
+    idx = NULL;
+    idx_op = BinaryExpr::Op::Add;
 }
 
 
@@ -28,12 +32,18 @@ IDX::IDX (std::shared_ptr<IterVar> it_) {
     this->shift = 0;
     this->it = it_;
     assert(this->it.use_count() != 0);
+    //LOOP_MERGE
+    idx = NULL;
+    idx_op = BinaryExpr::Op::Add;
 }
 
 
 IDX::IDX (std::shared_ptr<IterVar> it_, int64_t i) {
     this->shift = i;
     this->it = it_;
+    //LOOP_MERGE
+    idx = NULL;
+    idx_op = BinaryExpr::Op::Add;
 }
 
 
