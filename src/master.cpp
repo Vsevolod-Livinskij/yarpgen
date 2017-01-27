@@ -22,6 +22,10 @@ limitations under the License.
 
 using namespace rl;
 
+bool Master::is_std_array_needed = false;
+bool Master::is_vector_needed = false;
+bool Master::is_valarray_needed = false;
+
 Master::Master (std::string _out_folder) {
     out_folder = _out_folder;
     extern_inp_sym_table = std::make_shared<SymbolTable> ();
@@ -75,21 +79,22 @@ std::string Master::emit_init () {
 
 std::string Master::emit_decl () {
     std::string ret = "";
-    /* TODO: none of it is used currently.
-     * All these headers must be added only when they are really needed.
-     * Parsing these headers is costly for compile time
-    ret += "#include <cstdint>\n";
-    ret += "#include <array>\n";
-    ret += "#include <vector>\n";
-    ret += "#include <valarray>\n\n";
-    */
+    // All these headers must be added only when they are really needed.
+    // Parsing these headers is costly for compile time
+    if (is_std_array_needed)
+        ret += "#include <array>\n";
+    if (is_vector_needed)
+        ret += "#include <vector>\n";
+    if (is_valarray_needed)
+        ret += "#include <valarray>\n\n";
+
 
     ret += "void hash(unsigned long long int &seed, unsigned long long int const &v);\n\n";
 
     ret += extern_inp_sym_table->emit_variable_extern_decl() + "\n\n";
     ret += extern_mix_sym_table->emit_variable_extern_decl() + "\n\n";
     ret += extern_out_sym_table->emit_variable_extern_decl() + "\n\n";
-    //TODO: what if we extand struct types in mix_sym_tabl
+    //TODO: what if we extend struct types in mix_sym_table
     ret += extern_inp_sym_table->emit_struct_type_def() + "\n\n";
     ret += extern_inp_sym_table->emit_struct_extern_decl() + "\n\n";
     ret += extern_mix_sym_table->emit_struct_extern_decl() + "\n\n";
@@ -113,7 +118,7 @@ std::string Master::emit_func () {
 }
 
 std::string Master::emit_hash () {
-    std::string ret = "#include <functional>\n";
+    std::string ret = "";
     ret += "void hash(unsigned long long int &seed, unsigned long long int const &v) {\n";
     ret += "    seed ^= v + 0x9e3779b9 + (seed<<6) + (seed>>2);\n";
     ret += "}\n";
@@ -154,7 +159,7 @@ std::string Master::emit_check () { // TODO: rewrite with IR
 
 std::string Master::emit_main () {
     std::string ret = "";
-    ret += "#include <iostream>\n";
+    ret += "#include <cstdio>\n";
     ret += "#include \"init.h\"\n\n";
     ret += "extern void init ();\n";
     ret += "extern void foo ();\n";
@@ -162,7 +167,7 @@ std::string Master::emit_main () {
     ret += "int main () {\n";
     ret += "    init ();\n";
     ret += "    foo ();\n";
-    ret += "    std::cout << checksum () << std::endl;\n";
+    ret += "    printf(\"%llu\\n\", checksum ());\n";
     ret += "    return 0;\n";
     ret += "}";
     write_file("driver.cpp", ret);

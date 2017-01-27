@@ -16,6 +16,7 @@ limitations under the License.
 
 #include "loop_stmt.h"
 #include "namegen.h"
+#include "master.h"
 
 using namespace rl;
 
@@ -223,6 +224,7 @@ std::string VectorDeclStmt::emit (std::string offset) {
             ss << "[" << this->data->dim[i] << "]";
     }
     if (this->data->getKind() == VecElem::Kind::STD_VEC) {
+        Master::include_vector();
         for (uint64_t i = 0; i < this->data->dim.size(); ++i)
             ss << "std::vector<";
         ss << this->data->get_type()->get_name();
@@ -231,6 +233,7 @@ std::string VectorDeclStmt::emit (std::string offset) {
         ss << " " << this->data->get_name();
     }
     if (this->data->getKind() == VecElem::Kind::STD_VARR) {
+        Master::include_valarray();
         for (uint64_t i = 0; i < this->data->dim.size(); ++i)
             ss << "std::valarray<";
         ss << this->data->get_type()->get_name();
@@ -239,6 +242,7 @@ std::string VectorDeclStmt::emit (std::string offset) {
         ss << " " << this->data->get_name();
     }
     if (this->data->getKind() == VecElem::Kind::STD_ARR) {
+        Master::include_std_array();
         for (uint64_t i = 0; i < this->data->dim.size(); ++i)
             ss << "std::array<";
         ss << this->data->get_type()->get_name();

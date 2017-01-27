@@ -38,8 +38,16 @@ class Master {
         std::string emit_check ();
         std::string emit_main ();
 
+        static void include_std_array () { is_std_array_needed = true; }
+        static void include_vector () { is_vector_needed = true; }
+        static void include_valarray () { is_valarray_needed = true; }
+
     private:
         void write_file (std::string of_name, std::string data);
+
+        static bool is_std_array_needed;
+        static bool is_vector_needed;
+        static bool is_valarray_needed;
 
         GenPolicy gen_policy;
         std::shared_ptr<ScopeStmt> program;
