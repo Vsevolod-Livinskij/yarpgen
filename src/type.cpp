@@ -24,6 +24,15 @@ using namespace rl;
 
 std::string Type::get_name () {
     std::string ret = "";
+    ret += get_spec_and_mod_str();
+    ret += name;
+    if (align != 0)
+        ret += " __attribute__(aligned(" + std::to_string(align) + "))";
+    return ret;
+}
+
+std::string Type::get_spec_and_mod_str() {
+    std::string ret = "";
     ret += is_static ? "static " : "";
     switch (modifier) {
         case Mod::VOLAT:
@@ -42,9 +51,6 @@ std::string Type::get_name () {
             exit(-1);
             break;
     }
-    ret += name;
-    if (align != 0)
-        ret += " __attribute__(aligned(" + std::to_string(align) + "))";
     return ret;
 }
 
@@ -1830,3 +1836,154 @@ void BitField::dbg_dump () {
     ret += "is_signed: " + std::to_string(is_signed) + "\n";
     std::cout << ret;
 }
+
+ArrayType::ArrayType(std::shared_ptr<Type> _base_type, size_t _size, ArrayType::Kind _kind)
+        : Type (Type::ARRAY_TYPE), base_type(_base_type), size(_size), kind(_kind) {
+    name = "";
+    init_depth();
+}
+
+ArrayType::ArrayType(std::shared_ptr<Type> _base_type, size_t _size, ArrayType::Kind _kind, Type::Mod _modifier,
+                     bool _is_static, uint64_t _align)
+        : Type (Type::ARRAY_TYPE, _modifier, _is_static, _align), base_type(_base_type), size(_size), kind(_kind) {
+    name = "";
+    init_depth();
+}
+
+void ArrayType::init_depth() {
+    depth = 1;
+    if (base_type->is_array_type())
+        depth += std::static_pointer_cast<ArrayType>(base_type)->get_depth();
+}
+
+void ArrayType::dbg_dump() {
+    std::string ret = "";
+    ret += "kind: " + std::to_string(kind) + "\n";
+    ret += "size: " + std::to_string(size) + "\n";
+    ret += "depth: " + std::to_string(depth) + "\n";
+    ret += "full name: " + get_name();
+    if (kind == C_ARR)
+        ret += " " + get_suffix();
+    ret += "\n";
+    ret += "suffix: " + get_suffix() + "\n";
+    ret += "base type: ";
+    std::cout << ret;
+    base_type->dbg_dump();
+    std::cout << std::endl;
+}
+
+std::string ArrayType::get_name() {
+    std::string ret = "";
+    ret += get_spec_and_mod_str();
+    ret += get_simple_name_with_ptr_sign_ctrl();
+    if (align != 0)
+        ret += " __attribute__(aligned(" + std::to_string(align) + "))";
+    return ret;
+}
+
+std::string ArrayType::get_simple_name_with_ptr_sign_ctrl (bool emit_ptr_sign) {
+    std::string ret = "";
+    emit_ptr_sign |= (kind != C_ARR);
+
+    switch (kind) {
+        case C_ARR:
+            break;
+        case VAL_ARR:
+            ret += "std::valarray<";
+            break;
+        case STD_VEC:
+            ret += "std::vector<";
+            break;
+        case STD_ARR:
+            ret += "std::array<";
+            break;
+        case MAX_KIND:
+            std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": unsupported kind of array" << std::endl;
+            exit(-1);
+    }
+
+    if (base_type->is_array_type())
+        ret += std::static_pointer_cast<ArrayType>(base_type)->get_simple_name_with_ptr_sign_ctrl(emit_ptr_sign);
+    else
+        ret += base_type->get_simple_name();
+
+    if (emit_ptr_sign &&
+        base_type->is_array_type() && std::static_pointer_cast<ArrayType>(base_type)->get_kind() == C_ARR)
+        ret += "*";
+
+    switch (kind) {
+        case C_ARR:
+            break;
+        case VAL_ARR:
+        case STD_VEC:
+            ret += ">";
+            break;
+        case STD_ARR:
+            ret += ", " + std::to_string(size) + ">";
+            break;
+        case MAX_KIND:
+            std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": unsupported kind of array" << std::endl;
+            exit(-1);
+    }
+    return ret;
+}
+
+std::string ArrayType::get_simple_name () {
+    return get_simple_name_with_ptr_sign_ctrl ();
+}
+
+
+std::string ArrayType::get_suffix() {
+    if (kind != C_ARR)
+        return "";
+    std::string ret = "[" + std::to_string(size) + "]";
+    if (base_type->is_array_type()) {
+        std::shared_ptr<ArrayType> base_array_type = std::static_pointer_cast<ArrayType>(base_type);
+        std::string base_suffix = base_array_type->get_suffix();
+        if (!base_suffix.empty())
+            ret += " " + base_suffix;
+    }
+    return ret;
+}
+
+std::shared_ptr<ArrayType> ArrayType::generate(std::shared_ptr<Context> ctx) {
+    std::vector<std::shared_ptr<Type>> empty_vec;
+    return generate(ctx, empty_vec);
+}
+
+std::shared_ptr<ArrayType> ArrayType::generate (std::shared_ptr<Context> ctx,
+                                                std::vector<std::shared_ptr<Type>> avail_types) {
+    //TODO: should we generate nested arrays here? Let it be so.
+    uint32_t depth = rand_val_gen->get_rand_value(ctx->get_gen_policy()->get_min_array_depth(),
+                                                  ctx->get_gen_policy()->get_max_array_depth());
+    std::shared_ptr<ArrayType> base_array = auxiliary_generate(ctx, avail_types, depth);
+
+    Type::Mod modifier = ctx->get_gen_policy()->get_allowed_modifiers().at(rand_val_gen->get_rand_value<int>(0, ctx->get_gen_policy()->get_allowed_modifiers().size() - 1));
+    base_array->set_modifier(modifier);
+
+    bool is_static = false;
+    if (ctx->get_gen_policy()->get_allow_static_var())
+        is_static = rand_val_gen->get_rand_value<int>(false, true);
+    base_array->set_is_static(is_static);
+
+    //TODO: what about align?
+    base_array->set_align(0);
+
+    return base_array;
+}
+
+std::shared_ptr<ArrayType> ArrayType::auxiliary_generate(std::shared_ptr<Context> ctx,
+                                                         std::vector<std::shared_ptr<Type>> avail_types,
+                                                         uint32_t left_depth) {
+    Kind kind = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_array_kind_prob());
+    size_t size = rand_val_gen->get_rand_value(ctx->get_gen_policy()->get_min_array_size(),
+                                               ctx->get_gen_policy()->get_max_array_size());
+    std::shared_ptr<Type> base_type = NULL;
+    if (left_depth == 1)
+        //TODO: we have avail_members (which is actually are structures), so we need to use it
+        base_type = IntegerType::generate(ctx);
+    else
+        base_type = ArrayType::auxiliary_generate(ctx, avail_types, left_depth - 1);
+    return std::make_shared<ArrayType>(base_type, size, kind);
+}
+

@@ -33,6 +33,7 @@ class Type {
         enum TypeID {
             ATOMIC_TYPE,
             STRUCT_TYPE,
+            ARRAY_TYPE,
             MAX_TYPE_ID
         };
 
@@ -71,8 +72,8 @@ class Type {
         virtual IntegerTypeID get_int_type_id () { return MAX_INT_ID; }
         virtual bool get_is_signed() { return false; }
         virtual bool get_is_bit_field() { return false; }
-        std::string get_name ();
-        std::string get_simple_name () { return name; }
+        virtual std::string get_name ();
+        virtual std::string get_simple_name () { return name; }
         void set_modifier (Mod _modifier) { modifier = _modifier; }
         Mod get_modifier () { return modifier; }
         void set_is_static (bool _is_static) { is_static = _is_static; }
@@ -85,10 +86,13 @@ class Type {
         virtual bool is_int_type() { return false; }
         virtual bool is_fp_type() { return false; }
         virtual bool is_struct_type() { return false; }
+        virtual bool is_array_type() { return false; }
 
         virtual void dbg_dump() = 0;
 
     protected:
+        std::string get_spec_and_mod_str ();
+
         std::string name;
         Mod modifier;
         bool is_static;
@@ -139,6 +143,48 @@ class StructType : public Type {
         std::vector<std::shared_ptr<StructMember>> shadow_members;
         std::vector<std::shared_ptr<StructMember>> members;
         uint64_t nest_depth;
+};
+
+class ArrayType : public Type {
+    public:
+        enum Kind {
+            C_ARR,
+            VAL_ARR,
+            STD_ARR,
+            STD_VEC,
+            MAX_KIND
+        };
+
+        //TODO: add different access kind
+
+        //TODO: neew to add checks when use C_ARR as base type
+        ArrayType (std::shared_ptr<Type> _base_type, size_t _size, Kind _kind);
+        ArrayType (std::shared_ptr<Type> _base_type, size_t _size, Kind _kind,
+                   Mod _modifier, bool _is_static, uint64_t _align);
+        bool is_array_type () { return true; }
+        virtual std::string get_name ();
+        virtual std::string get_simple_name ();
+        virtual std::string get_suffix ();
+        std::shared_ptr<Type> get_base_type () { return base_type; }
+        Kind get_kind () { return kind; }
+        size_t get_size () { return size; }
+        uint64_t get_depth () { return depth; }
+        void dbg_dump ();
+        static std::shared_ptr<ArrayType> generate (std::shared_ptr<Context> ctx);
+        static std::shared_ptr<ArrayType> generate (std::shared_ptr<Context> ctx,
+                                                    std::vector<std::shared_ptr<Type>> avail_types);
+
+    private:
+        void init_depth ();
+        std::string get_simple_name_with_ptr_sign_ctrl (bool emit_ptr_sign = false);
+        static std::shared_ptr<ArrayType> auxiliary_generate(std::shared_ptr<Context> ctx,
+                                                             std::vector<std::shared_ptr<Type>> avail_types,
+                                                             uint32_t left_depth);
+
+        std::shared_ptr<Type> base_type;
+        size_t size;
+        Kind kind;
+        uint64_t depth;
 };
 
 enum UB {

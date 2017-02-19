@@ -96,8 +96,9 @@ int main (int argc, char* argv[]) {
     rand_val_gen = std::make_shared<RandValGen>(RandValGen (seed));
     default_gen_policy.init_from_config();
 
-//    self_test();
+    self_test();
 
+    /*
     Master mas (out_dir);
     mas.generate ();
     mas.emit_func ();
@@ -106,6 +107,6 @@ int main (int argc, char* argv[]) {
     mas.emit_hash ();
     mas.emit_check ();
     mas.emit_main ();
-
+    */
     return 0;
 }

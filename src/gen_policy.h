@@ -252,12 +252,23 @@ class GenPolicy {
         uint64_t get_max_bit_field_size () { return max_bit_field_size; }
         std::vector<Probability<BitFieldID>>& get_bit_field_prob () { return bit_field_prob; }
         void add_bit_field_prob(Probability<BitFieldID> prob) { bit_field_prob.push_back(prob); }
-        void init_from_config();
+
+        void set_min_array_size (size_t _min_array_size) { min_array_size = _min_array_size; }
+        size_t get_min_array_size () { return min_array_size; }
+        void set_max_array_size (size_t _max_array_size) { max_array_size = _max_array_size; }
+        size_t get_max_array_size () { return max_array_size; }
+        void set_min_array_depth (uint64_t _min_array_depth) { min_array_depth = _min_array_depth; }
+        uint64_t get_min_array_depth () { return min_array_depth; }
+        void set_max_array_depth (uint64_t _max_array_depth) { max_array_depth = _max_array_depth; }
+        uint64_t get_max_array_depth () { return max_array_depth; }
+        std::vector<Probability<ArrayType::Kind>> get_array_kind_prob () { return array_kind_prob; }
 
         static void add_to_complexity(Node::NodeID node_id);
         void set_max_test_complexity (uint64_t _compl) { max_test_complexity = _compl; }
         uint64_t get_max_test_complexity () { return max_test_complexity; }
         static uint64_t  get_test_complexity () { return test_complexity; }
+
+        void init_from_config();
 
     private:
         static bool default_was_loaded;
@@ -287,6 +298,13 @@ class GenPolicy {
         uint64_t min_bit_field_size;
         uint64_t max_bit_field_size;
         std::vector<Probability<BitFieldID>> bit_field_prob;
+
+        size_t min_array_size;
+        size_t max_array_size;
+        uint64_t min_array_depth;
+        uint64_t max_array_depth;
+        std::vector<Probability<ArrayType::Kind>> array_kind_prob;
+
 
         void set_modifier (bool value, Type::Mod modifier);
         bool get_modifier (Type::Mod modifier);
