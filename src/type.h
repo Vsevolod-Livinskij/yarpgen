@@ -88,6 +88,9 @@ class Type {
         virtual bool is_struct_type() { return false; }
         virtual bool is_array_type() { return false; }
 
+        virtual uint64_t get_nest_struct_depth () { return 0; }
+        virtual uint64_t get_nest_array_depth () { return 0; }
+
         virtual void dbg_dump() = 0;
 
     protected:
@@ -101,6 +104,8 @@ class Type {
     private:
         TypeID id;
 };
+
+class ArrayType;
 
 class StructType : public Type {
     public:
@@ -130,13 +135,17 @@ class StructType : public Type {
         uint64_t get_num_of_members () { return members.size(); }
         uint64_t get_num_of_shadow_members () { return shadow_members.size(); }
         uint64_t get_nest_depth () { return nest_depth; }
+        uint64_t get_nest_struct_depth () { return nest_depth; }
+        uint64_t get_nest_array_depth ();
         std::shared_ptr<StructMember> get_member (unsigned int num);
         std::string get_definition (std::string offset = "");
         std::string get_static_memb_def (std::string offset = "");
         bool is_struct_type() { return true; }
         void dbg_dump();
         static std::shared_ptr<StructType> generate (std::shared_ptr<Context> ctx);
-        static std::shared_ptr<StructType> generate (std::shared_ptr<Context> ctx, std::vector<std::shared_ptr<StructType>> nested_struct_types);
+        static std::shared_ptr<StructType> generate (std::shared_ptr<Context> ctx,
+                                                     std::vector<std::shared_ptr<StructType>> nested_struct_types,
+                                                     std::vector<std::shared_ptr<ArrayType>> arrays_with_structs);
 
     private:
         //TODO: it is a stub for unnamed bit fields. Nobody should know about them
@@ -169,16 +178,18 @@ class ArrayType : public Type {
         Kind get_kind () { return kind; }
         size_t get_size () { return size; }
         uint64_t get_depth () { return depth; }
+        uint64_t get_nest_struct_depth ();
+        uint64_t get_nest_array_depth () { return depth; }
         void dbg_dump ();
         static std::shared_ptr<ArrayType> generate (std::shared_ptr<Context> ctx);
         static std::shared_ptr<ArrayType> generate (std::shared_ptr<Context> ctx,
-                                                    std::vector<std::shared_ptr<Type>> avail_types);
+                                                    std::vector<std::shared_ptr<StructType>> avail_struct_types);
 
     private:
         void init_depth ();
         std::string get_simple_name_with_ptr_sign_ctrl (bool emit_ptr_sign = false);
         static std::shared_ptr<ArrayType> auxiliary_generate(std::shared_ptr<Context> ctx,
-                                                             std::vector<std::shared_ptr<Type>> avail_types,
+                                                             std::vector<std::shared_ptr<StructType>> avail_struct_types,
                                                              uint32_t left_depth);
 
         std::shared_ptr<Type> base_type;

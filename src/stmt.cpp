@@ -213,7 +213,10 @@ void ScopeStmt::form_extern_sym_table(std::shared_ptr<Context> ctx) {
 
     for (int i = 0; i < struct_types_num; ++i) {
         //TODO: Maybe we should create one container for all struct types? And should they all be equal?
-        std::shared_ptr<StructType> struct_type = StructType::generate(ctx, ctx->get_extern_inp_sym_table()->get_struct_types());
+
+        //TODO: It is a stub. REWRITE IT LATER!
+        std::vector<std::shared_ptr<ArrayType>> empty_arr_vec;
+        std::shared_ptr<StructType> struct_type = StructType::generate(ctx, ctx->get_extern_inp_sym_table()->get_struct_types(), empty_arr_vec);
         ctx->get_extern_inp_sym_table()->add_struct_type(struct_type);
         ctx->get_extern_out_sym_table()->add_struct_type(struct_type);
         ctx->get_extern_mix_sym_table()->add_struct_type(struct_type);

@@ -16,6 +16,7 @@ limitations under the License.
 
 //////////////////////////////////////////////////////////////////////////////
 #include <map>
+#include <cassert>
 
 #include "gen_policy.h"
 
@@ -117,9 +118,16 @@ void GenPolicy::init_from_config () {
     member_use_prob.push_back(Probability<bool>(false, 20));
     rand_val_gen->shuffle_prob(member_use_prob);
     max_struct_depth = MAX_STRUCT_DEPTH;
-    member_class_prob.push_back(Probability<Data::VarClassID>(Data::VarClassID::VAR, 70));
-    member_class_prob.push_back(Probability<Data::VarClassID>(Data::VarClassID::STRUCT, 30));
-    rand_val_gen->shuffle_prob(member_class_prob);
+    member_type_id_prob.push_back(Probability<Type::TypeID>(Type::ATOMIC_TYPE, 10));
+    member_type_id_prob.push_back(Probability<Type::TypeID>(Type::STRUCT_TYPE, 10));
+    member_type_id_prob.push_back(Probability<Type::TypeID>(Type::ARRAY_TYPE , 80));
+    rand_val_gen->shuffle_prob(member_type_id_prob);
+    static_member_prob.push_back(Probability<bool>(true, 20));
+    static_member_prob.push_back(Probability<bool>(false, 80));
+    rand_val_gen->shuffle_prob(static_member_prob);
+    array_with_struct_prob.push_back(Probability<bool>(true, 50));
+    array_with_struct_prob.push_back(Probability<bool>(false, 50));
+    rand_val_gen->shuffle_prob(array_with_struct_prob);
     min_bit_field_size = MIN_BIT_FIELD_SIZE;
     max_bit_field_size = MAX_BIT_FIELD_SIZE;
     bit_field_prob.push_back(Probability<BitFieldID>(UNNAMED, 15));
@@ -136,7 +144,13 @@ void GenPolicy::init_from_config () {
     array_kind_prob.push_back(Probability<ArrayType::Kind>(ArrayType::STD_VEC, 25));
     array_kind_prob.push_back(Probability<ArrayType::Kind>(ArrayType::STD_ARR, 25));
     rand_val_gen->shuffle_prob(array_kind_prob);
-
+    allow_mix_kind = true;
+    array_base_type_prob.push_back(Probability<Type::TypeID>(Type::STRUCT_TYPE, 30));
+    array_base_type_prob.push_back(Probability<Type::TypeID>(Type::ATOMIC_TYPE, 0));
+    rand_val_gen->shuffle_prob(array_base_type_prob);
+    struct_with_array_prob.push_back(Probability<bool>(false, 50));
+    struct_with_array_prob.push_back(Probability<bool>(true, 50));
+    rand_val_gen->shuffle_prob(struct_with_array_prob);
 
     out_data_type_prob.push_back(Probability<OutDataTypeID>(VAR, 70));
     out_data_type_prob.push_back(Probability<OutDataTypeID>(STRUCT, 30));
@@ -243,6 +257,41 @@ void GenPolicy::init_from_config () {
 
 void GenPolicy::copy_data (std::shared_ptr<GenPolicy> old) {
     cse = old->get_cse();
+}
+
+template <>
+void GenPolicy::prohibit_complex_subtype_id<ArrayType> () {
+    prohibit_type_id(array_base_type_prob, Type::STRUCT_TYPE);
+}
+
+template <>
+void GenPolicy::prohibit_complex_subtype_id<StructType> () {
+    prohibit_type_id(member_type_id_prob, Type::ARRAY_TYPE);
+}
+
+void GenPolicy::prohibit_type_id(std::vector<Probability<Type::TypeID>> &prob, const Type::TypeID key) {
+    std::vector<Probability<Type::TypeID>>::iterator array_iter = std::find_if(prob.begin(), prob.end(),
+                                                              [key] (Probability<Type::TypeID> elem)->bool {
+                                                                  return (elem.get_id() == key);
+                                                              });
+    if (array_iter == prob.end())
+        return;
+
+    // When we remove one variant from probability vector we don't significantly change distribution of all other variants
+    // a = x, b = y, c = z -> P(a) = x / (x + y + z) = 0.2 and P(b) = y / (x + y + z), so P(a) / P(b) = x / y
+    // If we remove c and share it's probability among others we'll have
+    // P(a) = x / (x + y + z) + z * x / (x + y) = x * (1 / (x + y + z) + z / (x + y))
+    // P(B) = y / (x + y + z) + z * y / (x + y) = y * (1 / (x + y + z) + z / (x + y))
+    // And P(a) / P(b) = x / y
+    prob.erase(array_iter);
+
+    assert (prob.size() > 0 && "Distribution vector can't has zero length");
+
+    bool all_prob_zeroes = std::all_of(prob.begin(), prob.end(),
+                                       [] (Probability<Type::TypeID> elem)->bool { return (elem.get_prob() == 0); });
+    if (all_prob_zeroes)
+        for (auto &i : prob)
+            i.increase_prob(1);
 }
 
 GenPolicy GenPolicy::apply_arith_ssp_const_use (ArithSSP::ConstUse pattern_id) {

@@ -243,7 +243,9 @@ class GenPolicy {
         std::vector<Probability<bool>> get_member_use_prob () { return member_use_prob; }
         void set_max_struct_depth (uint64_t _max_struct_depth) { max_struct_depth = _max_struct_depth; }
         uint64_t get_max_struct_depth () { return max_struct_depth; }
-        std::vector<Probability<Data::VarClassID>>& get_member_class_prob () { return member_class_prob; }
+        std::vector<Probability<Type::TypeID>>& get_member_type_id_prob () { return member_type_id_prob; }
+        std::vector<Probability<bool>> get_static_member_prob () { return static_member_prob ; }
+        std::vector<Probability<bool>>& get_array_with_struct_prob () { return array_with_struct_prob; }
         void add_out_data_type_prob(Probability<OutDataTypeID> prob) { out_data_type_prob.push_back(prob); }
         std::vector<Probability<OutDataTypeID>> get_out_data_type_prob() { return out_data_type_prob; }
         void set_min_bit_field_size (uint64_t _min_bit_field_size) { min_bit_field_size = _min_bit_field_size; }
@@ -261,7 +263,19 @@ class GenPolicy {
         uint64_t get_min_array_depth () { return min_array_depth; }
         void set_max_array_depth (uint64_t _max_array_depth) { max_array_depth = _max_array_depth; }
         uint64_t get_max_array_depth () { return max_array_depth; }
-        std::vector<Probability<ArrayType::Kind>> get_array_kind_prob () { return array_kind_prob; }
+        void set_array_kind_prob (std::vector<Probability<ArrayType::Kind>> prob) { array_kind_prob = prob; }
+        std::vector<Probability<ArrayType::Kind>>& get_array_kind_prob () { return array_kind_prob; }
+        void set_allow_mix_kind (bool _allow_mix_kind) { allow_mix_kind = _allow_mix_kind; }
+        bool get_allow_mix_kind () { return allow_mix_kind; }
+        void set_array_base_type_prob (std::vector<Probability<Type::TypeID>> _array_base_type_prob) { array_base_type_prob = _array_base_type_prob; }
+        std::vector<Probability<Type::TypeID>>& get_array_base_type_prob () { return array_base_type_prob; }
+        void set_struct_with_array_prob (std::vector<Probability<bool>> _struct_with_array_prob) { struct_with_array_prob = _struct_with_array_prob; }
+        std::vector<Probability<bool>> get_struct_with_array_prob () { return struct_with_array_prob; }
+
+        // We want always to follow the limit to the nested depth of arrays and structs.
+        // So this method removes relevant probability from TypeID distribution
+        template <typename T>
+        void prohibit_complex_subtype_id ();
 
         static void add_to_complexity(Node::NodeID node_id);
         void set_max_test_complexity (uint64_t _compl) { max_test_complexity = _compl; }
@@ -292,7 +306,9 @@ class GenPolicy {
         bool allow_mix_static_in_struct;
         bool allow_mix_types_in_struct;
         std::vector<Probability<bool>> member_use_prob;
-        std::vector<Probability<Data::VarClassID>> member_class_prob;
+        std::vector<Probability<Type::TypeID>> member_type_id_prob;
+        std::vector<Probability<bool>> static_member_prob;
+        std::vector<Probability<bool>> array_with_struct_prob;
         uint64_t max_struct_depth;
         std::vector<Probability<OutDataTypeID>> out_data_type_prob;
         uint64_t min_bit_field_size;
@@ -304,6 +320,9 @@ class GenPolicy {
         uint64_t min_array_depth;
         uint64_t max_array_depth;
         std::vector<Probability<ArrayType::Kind>> array_kind_prob;
+        bool allow_mix_kind;
+        std::vector<Probability<Type::TypeID>> array_base_type_prob;
+        std::vector<Probability<bool>> struct_with_array_prob;
 
 
         void set_modifier (bool value, Type::Mod modifier);
@@ -345,6 +364,8 @@ class GenPolicy {
 
         static uint64_t test_complexity;
         uint64_t max_test_complexity;
+
+        static void prohibit_type_id (std::vector<Probability<Type::TypeID>> &prob, const Type::TypeID key);
 };
 
 extern GenPolicy default_gen_policy;

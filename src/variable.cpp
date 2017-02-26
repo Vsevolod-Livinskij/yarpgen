@@ -50,6 +50,9 @@ void Struct::allocate_members() {
                 members.push_back(std::make_shared<Struct>(new_struct));
             }
         }
+        else if (cur_member->get_type()->is_array_type()) {
+            //TODO: It is a stub. REWRITE IT LATER!
+        }
         else {
             std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": unsupported type of struct member in Struct::allocate_members" << std::endl;
             exit(-1);

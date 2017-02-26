@@ -340,6 +340,18 @@ void self_test () {
     Context ctx_var (gen_policy, NULL, Node::NodeID::MAX_STMT_ID, true);
     ctx_var.set_local_sym_table(std::make_shared<SymbolTable>());
     std::shared_ptr<Context> ctx = std::make_shared<Context>(ctx_var);
-    std::shared_ptr<ArrayType> array_type = ArrayType::generate(ctx);
+
+    std::shared_ptr<StructType> struct_type = StructType::generate(ctx);
+    std::cout << struct_type->get_definition() << std::endl;
+
+    std::vector<std::shared_ptr<StructType>> avail_struct_types;
+    avail_struct_types.push_back(struct_type);
+    std::shared_ptr<ArrayType> array_type = ArrayType::generate(ctx, avail_struct_types);
     array_type->dbg_dump();
+
+    std::vector<std::shared_ptr<ArrayType>> avail_array_types;
+    avail_array_types.push_back(array_type);
+    std::shared_ptr<StructType> struct_type1 = StructType::generate(ctx, avail_struct_types, avail_array_types);
+    std::cout << struct_type1->get_definition() << std::endl;
+
  }
