@@ -37,6 +37,11 @@ std::shared_ptr<Data> Expr::get_value () {
             struct_var->set_name("");
             return struct_var;
         }
+        case Data::VarClassID::ARRAY: { //TODO: It is a stub. REWRITE IT LATER!
+            std::shared_ptr<Array> array_var = std::make_shared<Array>(*(std::static_pointer_cast<Array>(value)));
+            array_var->set_name("");
+            return array_var;
+        }
         case Data::VarClassID::MAX_CLASS_ID:
             std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": unsupported Data::VarClassID in Expr::get_value" << std::endl;
             exit(-1);
@@ -56,6 +61,7 @@ std::shared_ptr<Expr> VarUseExpr::set_value (std::shared_ptr<Expr> _expr) {
             return _expr;
             break;
         case Data::VarClassID::STRUCT:
+        case Data::VarClassID::ARRAY: //TODO: It is a stub. REWRITE IT LATER!
             //TODO: implement for Struct
             std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": Struct is unsupported in in VarUseExpr::set_value" << std::endl;
             exit(-1);
@@ -978,6 +984,7 @@ std::shared_ptr<Expr> MemberExpr::set_value (std::shared_ptr<Expr> _expr) {
             std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": Struct is unsupported in in MemberExpr::set_value" << std::endl;
             exit(-1);
             break;
+        case Data::VarClassID::ARRAY: //TODO: It is a stub. REWRITE IT LATER!
         case Data::VarClassID::MAX_CLASS_ID:
             std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": unsupported Data::VarClassID in MemberExpr::set_value" << std::endl;
             exit(-1);

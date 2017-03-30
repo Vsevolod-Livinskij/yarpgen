@@ -68,6 +68,7 @@ std::shared_ptr<RandValGen> rl::rand_val_gen;
 uint64_t RandValGen::struct_type_num = 0;
 uint64_t RandValGen::scalar_var_num = 0;
 uint64_t RandValGen::struct_var_num = 0;
+uint64_t RandValGen::array_var_num = 0;
 
 RandValGen::RandValGen (uint64_t _seed) {
     if (_seed != 0) {

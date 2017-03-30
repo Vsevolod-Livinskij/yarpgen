@@ -27,7 +27,7 @@ class Context;
 class Data {
     public:
         enum VarClassID {
-            VAR, STRUCT, MAX_CLASS_ID
+            VAR, STRUCT, ARRAY, MAX_CLASS_ID
         };
 
         //TODO: Data can be not only integer, but who cares
@@ -38,6 +38,7 @@ class Data {
         void set_name (std::string _name) { name = _name; }
         std::shared_ptr<Type> get_type () { return type; }
         virtual void dbg_dump () = 0;
+        //TODO: generate function should be pure virtual
 
     protected:
         std::shared_ptr<Type> type;
@@ -55,7 +56,7 @@ class Struct : public Data {
         std::shared_ptr<Data> get_member (unsigned int num);
         void dbg_dump ();
         //TODO: stub for modifiers, cause now they are inside type.
-        static std::shared_ptr<Struct> generate (std::shared_ptr<Context> ctx);
+        static std::shared_ptr<Struct> generate (std::shared_ptr<Context> ctx); //TODO: do we need this method?
         static std::shared_ptr<Struct> generate (std::shared_ptr<Context> ctx, std::shared_ptr<StructType> struct_type);
 
     private:
@@ -85,5 +86,26 @@ class ScalarVariable : public Data {
         AtomicType::ScalarTypedVal init_val;
         AtomicType::ScalarTypedVal cur_val;
         bool was_changed;
+};
+
+class Array : public Data, public std::enable_shared_from_this<Array> {
+    public:
+        Array (std::string _name, std::shared_ptr<ArrayType> _type, std::shared_ptr<Data> init_val) :
+               Data (_name, _type, Data::VarClassID::ARRAY), parent(NULL), base_data(init_val) { self_init(); }
+        void dbg_dump ();
+        static std::shared_ptr<Array> generate (std::shared_ptr<Context> ctx, std::shared_ptr<ArrayType> arr_type);
+        //TODO: add clusters
+
+    private:
+        Array (std::string _name, std::shared_ptr<ArrayType> _type, 
+               std::shared_ptr<Array> _parent, std::shared_ptr<Data> init_val) :
+               Data (_name, _type, Data::VarClassID::ARRAY), parent(_parent), base_data(init_val) { self_init(); }
+        void self_init ();
+
+        std::shared_ptr<Array> parent;
+        std::vector<std::shared_ptr<Data>> data;
+        std::shared_ptr<Data> base_data; //It is used for storing original init value,
+                                         // because many of cells will be reinitialized with cluster's value.
+        //TODO: std::vector<Cluster> cluster. They should only exist in top array and they will be used in init
 };
 }

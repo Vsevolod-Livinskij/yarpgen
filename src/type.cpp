@@ -141,6 +141,7 @@ static std::shared_ptr<T> get_complex_subtype (std::shared_ptr<Context> ctx,
                                                          uint64_t max_depth) {
     std::vector<std::shared_ptr<T>> suitable_subtypes;
     for (auto s : avail_subtypes)
+        //TODO: we should also limit struct depth
         if (s->get_nest_array_depth() + 1 < max_depth)
             suitable_subtypes.push_back(s);
 
@@ -1944,6 +1945,13 @@ void ArrayType::init_depth() {
 
 uint64_t ArrayType::get_nest_struct_depth() {
     return base_type->get_nest_struct_depth();
+}
+
+std::shared_ptr<Type> ArrayType::get_lower_base_type () {
+    if (!base_type->is_array_type())
+        return base_type;
+    std::shared_ptr<ArrayType> base_arr_type = std::static_pointer_cast<ArrayType>(base_type);
+    return base_arr_type->get_lower_base_type();
 }
 
 void ArrayType::dbg_dump() {

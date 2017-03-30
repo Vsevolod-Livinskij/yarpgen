@@ -354,4 +354,13 @@ void self_test () {
     std::shared_ptr<StructType> struct_type1 = StructType::generate(ctx, avail_struct_types, avail_array_types);
     std::cout << struct_type1->get_definition() << std::endl;
 
+    std::cout << "=============================================" << std::endl;
+    std::shared_ptr<ScalarVariable> arr_scal_var = ScalarVariable::generate(ctx);
+    std::shared_ptr<ArrayType> arr_type = std::make_shared<ArrayType>(arr_scal_var->get_type(), 3, ArrayType::Kind::C_ARR);
+    std::shared_ptr<Array> array_var = std::make_shared<Array>("arr_var", arr_type, arr_scal_var);
+    array_var->dbg_dump();
+
+    std::cout << "=============================================" << std::endl;
+    std::shared_ptr<Array> gen_arr_var = Array::generate(ctx, arr_type);
+    gen_arr_var->dbg_dump();
  }

@@ -175,6 +175,7 @@ class ArrayType : public Type {
         virtual std::string get_simple_name ();
         virtual std::string get_suffix ();
         std::shared_ptr<Type> get_base_type () { return base_type; }
+        std::shared_ptr<Type> get_lower_base_type ();
         Kind get_kind () { return kind; }
         size_t get_size () { return size; }
         uint64_t get_depth () { return depth; }

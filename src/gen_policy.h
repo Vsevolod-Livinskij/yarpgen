@@ -66,6 +66,7 @@ class RandValGen {
         uint64_t get_struct_type_num() { return struct_type_num; }
         std::string get_scalar_var_name() { return "var_" + std::to_string(++scalar_var_num); }
         std::string get_struct_var_name() { return "struct_obj_" + std::to_string(++struct_var_num); }
+        std::string get_array_var_name() { return "arr_" + std::to_string(++array_var_num); }
 
         template <typename T>
         void shuffle_prob(std::vector<Probability<T>> &prob_vec) {
@@ -94,6 +95,7 @@ class RandValGen {
         static uint64_t struct_type_num;
         static uint64_t scalar_var_num;
         static uint64_t struct_var_num;
+        static uint64_t array_var_num;
 };
 
 extern std::shared_ptr<RandValGen> rand_val_gen;

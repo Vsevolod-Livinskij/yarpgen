@@ -135,3 +135,54 @@ std::shared_ptr<ScalarVariable> ScalarVariable::generate(std::shared_ptr<Context
     ret->set_init_value(AtomicType::ScalarTypedVal::generate(ctx, ret->get_type()->get_int_type_id()));
     return ret;
 }
+
+void Array::self_init() {
+    std::shared_ptr<ArrayType> arr_type = std::static_pointer_cast<ArrayType>(type);
+    std::shared_ptr<Type> base_type = arr_type->get_base_type();
+    //TODO: can make this loop more optimal, but do we need it?
+    for (uint32_t i = 0; i < arr_type->get_size(); ++i) {
+        if (!base_type->is_array_type()) {
+            if (base_type->get_type_id() != base_data->get_type()->get_type_id() ||
+                //TODO: Is it strictly enough to ensure that types are equal?
+                base_type->get_name() != base_data->get_type()->get_name()) {
+                std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": array base type and init type should be equal" << std::endl;
+                exit(-1);
+            }
+            //TODO: we have a mess with base_data name, but who cares?
+            data.push_back(base_data);
+        }
+        else {
+            std::shared_ptr<ArrayType> base_arr_type = std::static_pointer_cast<ArrayType>(base_type);
+            Array base_array (name + " [" + std::to_string(i) + "]", base_arr_type, shared_from_this(), base_data);
+            data.push_back(std::make_shared<Array>(base_array));
+        }
+    }
+}
+
+void Array::dbg_dump() {
+    std::cout << "name: " << name << std::endl;
+    std::cout << "array type: " << std::endl;
+    type->dbg_dump();
+    std::cout << "parent: " << std::endl;
+    if (parent)
+        parent->dbg_dump();
+    else {
+        std::cout << "NULL";
+        std::cout << std::endl;
+        std::cout << "base data: " << std::endl;
+        base_data->dbg_dump();
+    }
+    std::cout << "elements: " << std::endl;
+    for (auto i : data)
+        i->dbg_dump();
+}
+
+std::shared_ptr<Array> Array::generate(std::shared_ptr<Context> ctx, std::shared_ptr<ArrayType> arr_type) {
+    std::shared_ptr<Type> base_init_type = arr_type->get_lower_base_type();
+    std::shared_ptr<Data> init_val = NULL;
+    if (base_init_type->is_struct_type())
+        init_val = std::make_shared<Struct>("", std::static_pointer_cast<StructType>(base_init_type));
+    else if (base_init_type->is_int_type())
+        init_val = std::make_shared<ScalarVariable>("", std::static_pointer_cast<IntegerType>(base_init_type));
+    return std::make_shared<Array>(rand_val_gen->get_array_var_name(), arr_type, init_val);
+}
