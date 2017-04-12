@@ -54,7 +54,7 @@ int MIN_OUT_STRUCT_NUM = 0;
 int MAX_OUT_STRUCT_NUM = 8;
 int MIN_STRUCT_MEMBERS_NUM = 1;
 int MAX_STRUCT_MEMBERS_NUM = 10;
-int MAX_STRUCT_DEPTH = 5;
+int MAX_STRUCT_DEPTH = 2;
 int MIN_BIT_FIELD_SIZE = 8;
 int MAX_BIT_FIELD_SIZE = 2; //TODO: unused, because it cause different result for LLVM and GCC. See pr70733
 
@@ -120,14 +120,14 @@ void GenPolicy::init_from_config () {
     rand_val_gen->shuffle_prob(member_use_prob);
     max_struct_depth = MAX_STRUCT_DEPTH;
     member_type_id_prob.push_back(Probability<Type::TypeID>(Type::ATOMIC_TYPE, 10));
-    member_type_id_prob.push_back(Probability<Type::TypeID>(Type::STRUCT_TYPE, 10));
+    member_type_id_prob.push_back(Probability<Type::TypeID>(Type::STRUCT_TYPE, 80));
     member_type_id_prob.push_back(Probability<Type::TypeID>(Type::ARRAY_TYPE , 80));
     rand_val_gen->shuffle_prob(member_type_id_prob);
     static_member_prob.push_back(Probability<bool>(true, 20));
     static_member_prob.push_back(Probability<bool>(false, 80));
     rand_val_gen->shuffle_prob(static_member_prob);
-    array_with_struct_prob.push_back(Probability<bool>(true, 50));
-    array_with_struct_prob.push_back(Probability<bool>(false, 50));
+    array_with_struct_prob.push_back(Probability<bool>(true, 80));
+    array_with_struct_prob.push_back(Probability<bool>(false, 20));
     rand_val_gen->shuffle_prob(array_with_struct_prob);
     min_bit_field_size = MIN_BIT_FIELD_SIZE;
     max_bit_field_size = MAX_BIT_FIELD_SIZE;
@@ -149,8 +149,8 @@ void GenPolicy::init_from_config () {
     array_base_type_prob.push_back(Probability<Type::TypeID>(Type::STRUCT_TYPE, 30));
     array_base_type_prob.push_back(Probability<Type::TypeID>(Type::ATOMIC_TYPE, 0));
     rand_val_gen->shuffle_prob(array_base_type_prob);
-    struct_with_array_prob.push_back(Probability<bool>(false, 50));
-    struct_with_array_prob.push_back(Probability<bool>(true, 50));
+    struct_with_array_prob.push_back(Probability<bool>(false, 80));
+    struct_with_array_prob.push_back(Probability<bool>(true, 20));
     rand_val_gen->shuffle_prob(struct_with_array_prob);
 
     out_data_type_prob.push_back(Probability<OutDataTypeID>(VAR, 70));

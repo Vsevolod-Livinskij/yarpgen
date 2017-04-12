@@ -135,7 +135,7 @@ class StructType : public Type {
         uint64_t get_num_of_members () { return members.size(); }
         uint64_t get_num_of_shadow_members () { return shadow_members.size(); }
         uint64_t get_nest_depth () { return nest_depth; }
-        uint64_t get_nest_struct_depth () { return nest_depth; }
+        uint64_t get_nest_struct_depth ();
         uint64_t get_nest_array_depth ();
         std::shared_ptr<StructMember> get_member (unsigned int num);
         std::string get_definition (std::string offset = "");
@@ -148,10 +148,13 @@ class StructType : public Type {
                                                      std::vector<std::shared_ptr<ArrayType>> arrays_with_structs);
 
     private:
+        static std::shared_ptr<ArrayType> get_suitable_array (std::vector<std::shared_ptr<ArrayType>> avail_subtypes,
+                                                              uint64_t max_depth);
+
         //TODO: it is a stub for unnamed bit fields. Nobody should know about them
         std::vector<std::shared_ptr<StructMember>> shadow_members;
         std::vector<std::shared_ptr<StructMember>> members;
-        uint64_t nest_depth;
+        uint64_t nest_depth; // It stores depth of immediate nested struct members
 };
 
 class ArrayType : public Type {
@@ -180,7 +183,7 @@ class ArrayType : public Type {
         size_t get_size () { return size; }
         uint64_t get_depth () { return depth; }
         uint64_t get_nest_struct_depth ();
-        uint64_t get_nest_array_depth () { return depth; }
+        uint64_t get_nest_array_depth ();
         void dbg_dump ();
         static std::shared_ptr<ArrayType> generate (std::shared_ptr<Context> ctx);
         static std::shared_ptr<ArrayType> generate (std::shared_ptr<Context> ctx,
@@ -191,12 +194,15 @@ class ArrayType : public Type {
         std::string get_simple_name_with_ptr_sign_ctrl (bool emit_ptr_sign = false);
         static std::shared_ptr<ArrayType> auxiliary_generate(std::shared_ptr<Context> ctx,
                                                              std::vector<std::shared_ptr<StructType>> avail_struct_types,
-                                                             uint32_t left_depth);
-
+                                                             uint32_t left_depth,
+                                                             Type::TypeID base_type_id,
+                                                             bool add_struct_with_arr);
+        static std::shared_ptr<StructType> get_suitable_struct (std::vector<std::shared_ptr<StructType>> avail_subtypes,
+                                                                uint64_t exact_depth);
         std::shared_ptr<Type> base_type;
         size_t size;
         Kind kind;
-        uint64_t depth;
+        uint64_t depth; // It stores depth to the lower base type (ie array dimensions).
 };
 
 enum UB {

@@ -114,12 +114,17 @@ std::string StructType::get_static_memb_def (std::string offset) {
     return ret;
 }
 
+uint64_t StructType::get_nest_struct_depth() {
+    uint64_t ret = 0;
+    for (const auto &member : members)
+        ret = std::max(ret, member->get_type()->get_nest_struct_depth());
+    return ret + 1;
+}
+
 uint64_t StructType::get_nest_array_depth() {
     uint64_t ret = 0;
     for (auto i : members)
-        if (i->get_type()->is_array_type()) {
-            ret = std::max(ret, i->get_type()->get_nest_array_depth());
-        }
+        ret = std::max(ret, i->get_type()->get_nest_array_depth());
     return ret;
 }
 
@@ -134,29 +139,19 @@ std::shared_ptr<StructType> StructType::generate (std::shared_ptr<Context> ctx) 
     return generate(ctx, empty_struct_vec, empty_arr_vec);
 }
 
-template <typename T>
-static std::shared_ptr<T> get_complex_subtype (std::shared_ptr<Context> ctx,
-                                                         std::vector<std::shared_ptr<T>> avail_subtypes,
-                                                         bool add_containing_type,
-                                                         uint64_t max_depth) {
-    std::vector<std::shared_ptr<T>> suitable_subtypes;
-    for (auto s : avail_subtypes)
-        //TODO: we should also limit struct depth
-        if (s->get_nest_array_depth() + 1 < max_depth)
-            suitable_subtypes.push_back(s);
+std::shared_ptr<ArrayType> StructType::get_suitable_array (std::vector<std::shared_ptr<ArrayType>> avail_subtypes,
+                                                           uint64_t max_depth) {
+    std::vector<std::shared_ptr<ArrayType>> suitable_subtypes;
+    for (const auto &subtype : avail_subtypes)
+        if (subtype->get_nest_struct_depth() + 1 <= max_depth)
+            suitable_subtypes.push_back(subtype);
 
-    if (add_containing_type && suitable_subtypes.size() > 0) {
-        uint64_t subtype_idx = rand_val_gen->get_rand_value(0UL, avail_subtypes.size() - 1);
-        return avail_subtypes.at(subtype_idx);
+    if (suitable_subtypes.size() > 0) {
+        uint64_t subtype_idx = rand_val_gen->get_rand_value(0UL, suitable_subtypes.size() - 1);
+        return suitable_subtypes.at(subtype_idx);
     }
-    else {
-        GenPolicy tmp_gen_policy = *ctx->get_gen_policy();
-        tmp_gen_policy.prohibit_complex_subtype_id<T>();
-        std::shared_ptr<Context> new_context = std::make_shared<Context>(*ctx);
-        new_context->set_gen_policy(tmp_gen_policy);
-        //TODO: maybe we should scan input subtypes for zero depth and add them?
-        return T::generate(new_context);
-    }
+    else
+        return NULL;
 }
 
 static Type::TypeID make_member_type_id_choice (std::shared_ptr<Context> ctx) {
@@ -192,15 +187,18 @@ std::shared_ptr<StructType> StructType::generate (std::shared_ptr<Context> ctx,
 
     Type::TypeID member_class = make_member_type_id_choice(ctx);
 
-    std::shared_ptr<Type> primary_type;
-    if (member_class == Type::ATOMIC_TYPE) {
+    std::shared_ptr<Type> primary_type = NULL;
+    if (member_class == Type::ARRAY_TYPE)
+        primary_type = get_suitable_array(arrays_with_structs, ctx->get_gen_policy()->get_max_struct_depth());
+
+    if (member_class == Type::ATOMIC_TYPE ||
+       // If we can't choose suitable array type, we fall back to AtomicType, see above
+       (primary_type == NULL && member_class == Type::ARRAY_TYPE)) {
         IntegerType::IntegerTypeID int_type_id = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_allowed_int_types());
         primary_type = IntegerType::init(int_type_id, primary_mod, primary_static_spec, 0);
     }
     else if (member_class == Type::ARRAY_TYPE) {
-        primary_type = get_complex_subtype(ctx, arrays_with_structs,
-                                           rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_struct_with_array_prob()),
-                                           ctx->get_gen_policy()->get_max_struct_depth());
+        //If we can't choose suitable array type, we fall back to AtomicType, see above
     }
     else {
         std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": unsupported member type" << std::endl;
@@ -239,13 +237,12 @@ std::shared_ptr<StructType> StructType::generate (std::shared_ptr<Context> ctx,
             }
             else {
                 member_class = make_member_type_id_choice(ctx);
-
+                primary_type = NULL;
                 if (member_class == Type::ARRAY_TYPE) {
-                    primary_type = get_complex_subtype(ctx, arrays_with_structs,
-                                                       rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_struct_with_array_prob()),
-                                                       ctx->get_gen_policy()->get_max_struct_depth());
+                    primary_type = get_suitable_array(arrays_with_structs, ctx->get_gen_policy()->get_max_struct_depth());
                 }
-                else if (member_class == Type::ATOMIC_TYPE) {
+                if (member_class == Type::ATOMIC_TYPE ||
+                   (primary_type == NULL && member_class == Type::ARRAY_TYPE)) {
                     GenPolicy::BitFieldID bit_field_dis = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_bit_field_prob());
                     if (bit_field_dis == GenPolicy::BitFieldID::UNNAMED) {
                         struct_type->add_shadow_member(BitField::generate(ctx, true));
@@ -258,6 +255,8 @@ std::shared_ptr<StructType> StructType::generate (std::shared_ptr<Context> ctx,
                     else {
                         primary_type = IntegerType::generate(ctx);
                     }
+                }
+                else if (member_class == Type::ARRAY_TYPE) {
                 }
                 else {
                     std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": unsupported member type" << std::endl;
@@ -1947,6 +1946,12 @@ uint64_t ArrayType::get_nest_struct_depth() {
     return base_type->get_nest_struct_depth();
 }
 
+uint64_t ArrayType::get_nest_array_depth() {
+    uint64_t ret = 1;
+    ret += base_type->get_nest_array_depth();
+    return ret;
+}
+
 std::shared_ptr<Type> ArrayType::get_lower_base_type () {
     if (!base_type->is_array_type())
         return base_type;
@@ -2064,7 +2069,10 @@ std::shared_ptr<ArrayType> ArrayType::generate (std::shared_ptr<Context> ctx,
         tmp_gen_policy.set_array_kind_prob(new_array_kind_prob);
         gen_ctx->set_gen_policy(tmp_gen_policy);
     }
-    std::shared_ptr<ArrayType> base_array = auxiliary_generate(gen_ctx, avail_struct_types, depth);
+    Type::TypeID base_type_id = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_array_base_type_prob());
+    bool add_struct_with_array = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_struct_with_array_prob());
+    std::shared_ptr<ArrayType> base_array = auxiliary_generate(gen_ctx, avail_struct_types, depth,
+                                                               base_type_id, add_struct_with_array);
 
     Type::Mod modifier = ctx->get_gen_policy()->get_allowed_modifiers().at(
             rand_val_gen->get_rand_value(0UL, ctx->get_gen_policy()->get_allowed_modifiers().size() - 1));
@@ -2081,28 +2089,47 @@ std::shared_ptr<ArrayType> ArrayType::generate (std::shared_ptr<Context> ctx,
     return base_array;
 }
 
+std::shared_ptr<StructType> ArrayType::get_suitable_struct (std::vector<std::shared_ptr<StructType>> avail_subtypes,
+                                                            uint64_t exact_depth) {
+    std::vector<std::shared_ptr<StructType>> suitable_subtypes;
+    for (const auto &subtype : avail_subtypes)
+        if (subtype->get_nest_array_depth() == exact_depth)
+            suitable_subtypes.push_back(subtype);
+
+    if (suitable_subtypes.size() > 0) {
+        uint64_t subtype_idx = rand_val_gen->get_rand_value(0UL, suitable_subtypes.size() - 1);
+        return suitable_subtypes.at(subtype_idx);
+    } else
+        return NULL;
+}
 
 std::shared_ptr<ArrayType> ArrayType::auxiliary_generate(std::shared_ptr<Context> ctx,
                                                          std::vector<std::shared_ptr<StructType>> avail_struct_types,
-                                                         uint32_t left_depth) {
+                                                         uint32_t left_depth,
+                                                         Type::TypeID base_type_id,
+                                                         bool add_struct_with_arr) {
     Kind kind = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_array_kind_prob());
     size_t size = rand_val_gen->get_rand_value(ctx->get_gen_policy()->get_min_array_size(),
                                                ctx->get_gen_policy()->get_max_array_size());
     std::shared_ptr<Type> base_type = NULL;
+    if (add_struct_with_arr ||
+       (left_depth == 1 && base_type_id == Type::STRUCT_TYPE))
+        base_type = get_suitable_struct(avail_struct_types, left_depth - 1);
+
     if (left_depth == 1) {
-        Type::TypeID base_type_id = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_array_base_type_prob());
-        if (base_type_id == Type::STRUCT_TYPE)
-            base_type = get_complex_subtype(ctx, avail_struct_types,
-                                            rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_struct_with_array_prob()),
-                                            ctx->get_gen_policy()->get_max_array_depth());
-        else if (base_type_id == Type::ATOMIC_TYPE)
+        if (base_type_id == Type::ATOMIC_TYPE ||
+           //If we can't choose suitable struct, we fall back to AtomicType
+           (base_type == NULL && base_type_id == Type::STRUCT_TYPE))
             base_type = IntegerType::generate(ctx);
+        else if (base_type_id == Type::STRUCT_TYPE) {
+            // If we can't choose suitable struct, we fall back to AtomicType (see above)
+        }
         else {
-            std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": unsupported base type id" << std::endl;
+            std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": unsupported base type for array" << std::endl;
             exit(-1);
         }
     }
     else
-        base_type = ArrayType::auxiliary_generate(ctx, avail_struct_types, left_depth - 1);
+        base_type = ArrayType::auxiliary_generate(ctx, avail_struct_types, left_depth - 1, base_type_id, add_struct_with_arr);
     return std::make_shared<ArrayType>(base_type, size, kind);
 }

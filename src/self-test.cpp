@@ -340,7 +340,7 @@ void self_test () {
     Context ctx_var (gen_policy, NULL, Node::NodeID::MAX_STMT_ID, true);
     ctx_var.set_local_sym_table(std::make_shared<SymbolTable>());
     std::shared_ptr<Context> ctx = std::make_shared<Context>(ctx_var);
-
+/*
     std::shared_ptr<StructType> struct_type = StructType::generate(ctx);
     std::cout << struct_type->get_definition() << std::endl;
 
@@ -363,4 +363,25 @@ void self_test () {
     std::cout << "=============================================" << std::endl;
     std::shared_ptr<Array> gen_arr_var = Array::generate(ctx, arr_type);
     gen_arr_var->dbg_dump();
- }
+*/
+    std::vector<std::shared_ptr<StructType>> struct_types;
+    std::vector<std::shared_ptr<ArrayType>> array_types;
+    int num = 2;
+    for (int i = 0; i < num; ++i) {
+        struct_types.push_back(StructType::generate(ctx, struct_types, array_types));
+        array_types.push_back(ArrayType::generate(ctx, struct_types));
+    }
+
+    for (auto &&struct_type : struct_types) {
+        struct_type->dbg_dump();
+        std::cout << struct_type->get_nest_struct_depth() << " | ";
+        std::cout << struct_type->get_nest_array_depth() << std::endl;
+    }
+    std::cout << "=====================" << std::endl;
+    for (auto &&array_type : array_types) {
+        array_type->dbg_dump();
+        std::cout << array_type->get_nest_struct_depth() << " | ";
+        std::cout << array_type->get_nest_array_depth() << std::endl;
+    }
+
+}
