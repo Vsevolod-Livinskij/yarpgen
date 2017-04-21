@@ -257,10 +257,12 @@ class GenPolicy {
         std::vector<Probability<BitFieldID>>& get_bit_field_prob () { return bit_field_prob; }
         void add_bit_field_prob(Probability<BitFieldID> prob) { bit_field_prob.push_back(prob); }
 
-        void set_min_array_size (size_t _min_array_size) { min_array_size = _min_array_size; }
-        size_t get_min_array_size () { return min_array_size; }
-        void set_max_array_size (size_t _max_array_size) { max_array_size = _max_array_size; }
-        size_t get_max_array_size () { return max_array_size; }
+        void set_min_array_dim_size (size_t _min_array_dim_size) { min_array_dim_size = _min_array_dim_size; }
+        size_t get_min_array_dim_size () { return min_array_dim_size; }
+        void set_max_array_dim_size (size_t _max_array_dim_size) { max_array_dim_size = _max_array_dim_size; }
+        size_t get_max_array_dim_size () { return max_array_dim_size; }
+        void set_max_array_total_size (size_t _max_array_total_size) { max_array_total_size = _max_array_total_size; }
+        size_t get_max_array_total_size () { return max_array_total_size; }
         void set_min_array_depth (uint64_t _min_array_depth) { min_array_depth = _min_array_depth; }
         uint64_t get_min_array_depth () { return min_array_depth; }
         void set_max_array_depth (uint64_t _max_array_depth) { max_array_depth = _max_array_depth; }
@@ -317,8 +319,9 @@ class GenPolicy {
         uint64_t max_bit_field_size;
         std::vector<Probability<BitFieldID>> bit_field_prob;
 
-        size_t min_array_size;
-        size_t max_array_size;
+        size_t min_array_dim_size;
+        size_t max_array_dim_size;
+        size_t max_array_total_size;
         uint64_t min_array_depth;
         uint64_t max_array_depth;
         std::vector<Probability<ArrayType::Kind>> array_kind_prob;

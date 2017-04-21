@@ -16,6 +16,9 @@ limitations under the License.
 
 //////////////////////////////////////////////////////////////////////////////
 
+#include <cassert>
+#include <utility>
+
 #include "type.h"
 #include "sym_table.h"
 #include "variable.h"
@@ -2071,8 +2074,9 @@ std::shared_ptr<ArrayType> ArrayType::generate (std::shared_ptr<Context> ctx,
     }
     Type::TypeID base_type_id = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_array_base_type_prob());
     bool add_struct_with_array = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_struct_with_array_prob());
+    std::vector<size_t> dim_sizes = generate_dim_sizes(ctx, depth);
     std::shared_ptr<ArrayType> base_array = auxiliary_generate(gen_ctx, avail_struct_types, depth,
-                                                               base_type_id, add_struct_with_array);
+                                                               dim_sizes, base_type_id, add_struct_with_array);
 
     Type::Mod modifier = ctx->get_gen_policy()->get_allowed_modifiers().at(
             rand_val_gen->get_rand_value(0UL, ctx->get_gen_policy()->get_allowed_modifiers().size() - 1));
@@ -2106,11 +2110,12 @@ std::shared_ptr<StructType> ArrayType::get_suitable_struct (std::vector<std::sha
 std::shared_ptr<ArrayType> ArrayType::auxiliary_generate(std::shared_ptr<Context> ctx,
                                                          std::vector<std::shared_ptr<StructType>> avail_struct_types,
                                                          uint32_t left_depth,
+                                                         std::vector<size_t> dim_sizes,
                                                          Type::TypeID base_type_id,
                                                          bool add_struct_with_arr) {
     Kind kind = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_array_kind_prob());
-    size_t size = rand_val_gen->get_rand_value(ctx->get_gen_policy()->get_min_array_size(),
-                                               ctx->get_gen_policy()->get_max_array_size());
+    size_t size = dim_sizes.front();
+    dim_sizes.erase(dim_sizes.begin());
     std::shared_ptr<Type> base_type = NULL;
     if (add_struct_with_arr ||
        (left_depth == 1 && base_type_id == Type::STRUCT_TYPE))
@@ -2130,6 +2135,36 @@ std::shared_ptr<ArrayType> ArrayType::auxiliary_generate(std::shared_ptr<Context
         }
     }
     else
-        base_type = ArrayType::auxiliary_generate(ctx, avail_struct_types, left_depth - 1, base_type_id, add_struct_with_arr);
+        base_type = ArrayType::auxiliary_generate(ctx, avail_struct_types, left_depth - 1, dim_sizes, base_type_id, add_struct_with_arr);
     return std::make_shared<ArrayType>(base_type, size, kind);
+}
+
+std::vector<size_t> ArrayType::generate_dim_sizes(std::shared_ptr<Context> ctx, uint32_t dim_num) {
+    size_t min_array_dim_size = ctx->get_gen_policy()->get_min_array_dim_size();
+    size_t max_array_dim_size = ctx->get_gen_policy()->get_max_array_dim_size();
+    assert(min_array_dim_size< max_array_dim_size);
+    size_t free_chunk_start = dim_num * min_array_dim_size;
+    size_t free_chunk_end = std::min(dim_num * max_array_dim_size, ctx->get_gen_policy()->get_max_array_total_size());
+    if (free_chunk_start > free_chunk_end) {
+        std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": free_chunk_start should be less than free_chunk_end" << std::endl;
+        exit(-1);
+    }
+    size_t free_chunk = free_chunk_end - free_chunk_start;
+    std::vector<std::pair<uint32_t, size_t >> raw_results;
+    for (uint32_t i = 0; i < dim_num; ++i)
+        raw_results.push_back(std::pair<uint32_t, size_t>(i, min_array_dim_size));
+
+    std::vector<size_t> results (dim_num, 0);
+    uint32_t distrib_dim_num = rand_val_gen->get_rand_value<uint32_t>(1U, dim_num * 4); // Magic number
+    size_t delta = round((double)free_chunk / distrib_dim_num);
+    for (size_t i = 0; i < free_chunk; i += delta) {
+        uint32_t idx = rand_val_gen->get_rand_value<uint32_t>(0, raw_results.size() - 1);
+        if (raw_results.at(idx).second + delta >= max_array_dim_size) {
+            results.at(raw_results.at(idx).first) = max_array_dim_size;
+            raw_results.erase(raw_results.begin() + idx);
+        }
+        else
+            raw_results.at(idx).second += delta;
+    }
+    return results;
 }

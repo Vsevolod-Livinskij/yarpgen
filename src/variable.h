@@ -88,21 +88,14 @@ class ScalarVariable : public Data {
         bool was_changed;
 };
 
-class Array : public Data, public std::enable_shared_from_this<Array> {
+class Array : public Data {
     public:
-        Array (std::string _name, std::shared_ptr<ArrayType> _type, std::shared_ptr<Data> init_val) :
-               Data (_name, _type, Data::VarClassID::ARRAY), parent(NULL), base_data(init_val) { self_init(); }
+        Array (std::string _name, std::shared_ptr<ArrayType> _type, std::shared_ptr<Data> init_val);
         void dbg_dump ();
         static std::shared_ptr<Array> generate (std::shared_ptr<Context> ctx, std::shared_ptr<ArrayType> arr_type);
         //TODO: add clusters
 
     private:
-        Array (std::string _name, std::shared_ptr<ArrayType> _type, 
-               std::shared_ptr<Array> _parent, std::shared_ptr<Data> init_val) :
-               Data (_name, _type, Data::VarClassID::ARRAY), parent(_parent), base_data(init_val) { self_init(); }
-        void self_init ();
-
-        std::shared_ptr<Array> parent;
         std::vector<std::shared_ptr<Data>> data;
         std::shared_ptr<Data> base_data; //It is used for storing original init value,
                                          // because many of cells will be reinitialized with cluster's value.

@@ -136,7 +136,8 @@ std::shared_ptr<ScalarVariable> ScalarVariable::generate(std::shared_ptr<Context
     return ret;
 }
 
-void Array::self_init() {
+Array::Array(std::string _name, std::shared_ptr<ArrayType> _type, std::shared_ptr<Data> init_val) :
+                  Data (_name, _type, Data::VarClassID::ARRAY), base_data(init_val) {
     std::shared_ptr<ArrayType> arr_type = std::static_pointer_cast<ArrayType>(type);
     std::shared_ptr<Type> base_type = arr_type->get_base_type();
     //TODO: can make this loop more optimal, but do we need it?
@@ -153,8 +154,7 @@ void Array::self_init() {
         }
         else {
             std::shared_ptr<ArrayType> base_arr_type = std::static_pointer_cast<ArrayType>(base_type);
-            Array base_array (name + " [" + std::to_string(i) + "]", base_arr_type, shared_from_this(), base_data);
-            data.push_back(std::make_shared<Array>(base_array));
+            data.push_back(std::make_shared<Array>(name + " [" + std::to_string(i) + "]", base_arr_type, base_data));
         }
     }
 }
@@ -163,15 +163,8 @@ void Array::dbg_dump() {
     std::cout << "name: " << name << std::endl;
     std::cout << "array type: " << std::endl;
     type->dbg_dump();
-    std::cout << "parent: " << std::endl;
-    if (parent)
-        parent->dbg_dump();
-    else {
-        std::cout << "NULL";
-        std::cout << std::endl;
-        std::cout << "base data: " << std::endl;
-        base_data->dbg_dump();
-    }
+    std::cout << "base data: " << std::endl;
+    base_data->dbg_dump();
     std::cout << "elements: " << std::endl;
     for (auto i : data)
         i->dbg_dump();

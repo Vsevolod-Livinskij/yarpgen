@@ -384,4 +384,9 @@ void self_test () {
         std::cout << array_type->get_nest_array_depth() << std::endl;
     }
 
+    std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+    for (auto &&array_type : array_types) {
+        std::shared_ptr<Array> gen_arr_var = Array::generate(ctx, array_type);
+        gen_arr_var->dbg_dump();
+    }
 }

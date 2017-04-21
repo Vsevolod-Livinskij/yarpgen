@@ -58,8 +58,9 @@ int MAX_STRUCT_DEPTH = 2;
 int MIN_BIT_FIELD_SIZE = 8;
 int MAX_BIT_FIELD_SIZE = 2; //TODO: unused, because it cause different result for LLVM and GCC. See pr70733
 
-int MIN_ARRAY_SIZE = 10;
-int MAX_ARRAY_SIZE = 1000;
+int MIN_ARRAY_DIM_SIZE = 10;
+int MAX_ARRAY_DIM_SIZE = 1000;
+int MAX_ARRAY_TOTAL_SIZE = 10000;
 int MIN_ARRAY_DEPTH = 1;
 int MAX_ARRAY_DEPTH = 4;
 ///////////////////////////////////////////////////////////////////////////////
@@ -136,8 +137,9 @@ void GenPolicy::init_from_config () {
     bit_field_prob.push_back(Probability<BitFieldID>(MAX_BIT_FIELD_ID, 65));
     rand_val_gen->shuffle_prob(bit_field_prob);
 
-    min_array_size = MIN_ARRAY_SIZE;
-    max_array_size = MAX_ARRAY_SIZE;
+    min_array_dim_size = MIN_ARRAY_DIM_SIZE;
+    max_array_dim_size = MAX_ARRAY_DIM_SIZE;
+    max_array_total_size = MAX_ARRAY_TOTAL_SIZE;
     min_array_depth = MIN_ARRAY_DEPTH;
     max_array_depth = MAX_ARRAY_DEPTH;
     array_kind_prob.push_back(Probability<ArrayType::Kind>(ArrayType::C_ARR, 25));

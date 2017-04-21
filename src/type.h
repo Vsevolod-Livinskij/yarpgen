@@ -191,10 +191,12 @@ class ArrayType : public Type {
 
     private:
         void init_depth ();
+        static std::vector<size_t> generate_dim_sizes (std::shared_ptr<Context> ctx, uint32_t dim_num);
         std::string get_simple_name_with_ptr_sign_ctrl (bool emit_ptr_sign = false);
         static std::shared_ptr<ArrayType> auxiliary_generate(std::shared_ptr<Context> ctx,
                                                              std::vector<std::shared_ptr<StructType>> avail_struct_types,
                                                              uint32_t left_depth,
+                                                             std::vector<size_t> dim_sizes,
                                                              Type::TypeID base_type_id,
                                                              bool add_struct_with_arr);
         static std::shared_ptr<StructType> get_suitable_struct (std::vector<std::shared_ptr<StructType>> avail_subtypes,
