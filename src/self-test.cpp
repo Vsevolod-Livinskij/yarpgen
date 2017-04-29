@@ -363,15 +363,29 @@ void self_test () {
     std::cout << "=============================================" << std::endl;
     std::shared_ptr<Array> gen_arr_var = Array::generate(ctx, arr_type);
     gen_arr_var->dbg_dump();
+
+    size_t total_size = 0;
+    for (int i = 1; i < 5; ++i) {
+        std::cout << "Dim num: " << i << " : ";
+        auto res = ArrayType::generate_dim_sizes(ctx, i);
+        for (auto &&item : res) {
+            std::cout << item << ", ";
+        }
+        total_size = 1;
+        for (const auto &j : res)
+            total_size *= j;
+        std::cout << " | " << total_size << std::endl;
+
+    }
 */
     std::vector<std::shared_ptr<StructType>> struct_types;
     std::vector<std::shared_ptr<ArrayType>> array_types;
-    int num = 2;
+    int num = 2000;
     for (int i = 0; i < num; ++i) {
         struct_types.push_back(StructType::generate(ctx, struct_types, array_types));
         array_types.push_back(ArrayType::generate(ctx, struct_types));
     }
-
+/*
     for (auto &&struct_type : struct_types) {
         struct_type->dbg_dump();
         std::cout << struct_type->get_nest_struct_depth() << " | ";
@@ -389,4 +403,5 @@ void self_test () {
         std::shared_ptr<Array> gen_arr_var = Array::generate(ctx, array_type);
         gen_arr_var->dbg_dump();
     }
+*/
 }

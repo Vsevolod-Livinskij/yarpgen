@@ -58,9 +58,9 @@ int MAX_STRUCT_DEPTH = 2;
 int MIN_BIT_FIELD_SIZE = 8;
 int MAX_BIT_FIELD_SIZE = 2; //TODO: unused, because it cause different result for LLVM and GCC. See pr70733
 
-int MIN_ARRAY_DIM_SIZE = 10;
+int MIN_ARRAY_DIM_SIZE = 2;
 int MAX_ARRAY_DIM_SIZE = 1000;
-int MAX_ARRAY_TOTAL_SIZE = 10000;
+int MAX_ARRAY_TOTAL_SIZE = 100000;
 int MIN_ARRAY_DEPTH = 1;
 int MAX_ARRAY_DEPTH = 4;
 ///////////////////////////////////////////////////////////////////////////////

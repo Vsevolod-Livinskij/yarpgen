@@ -2140,31 +2140,40 @@ std::shared_ptr<ArrayType> ArrayType::auxiliary_generate(std::shared_ptr<Context
 }
 
 std::vector<size_t> ArrayType::generate_dim_sizes(std::shared_ptr<Context> ctx, uint32_t dim_num) {
+    //TODO: it tends to use min_array_dim_size in output too often. We need to figure out how to improve it.
+    std::vector<Probability<size_t>> dim_probability;
+    for (int i = 0; i < dim_num; i++)
+        dim_probability.emplace_back(i, 1);
+    for (int i = 0; i < dim_num * 4; ++i) { //TODO: move magic number
+        size_t idx = rand_val_gen->get_rand_value<size_t>(0, dim_num - 1);
+        dim_probability.at(idx).increase_prob(1);
+    }
+
     size_t min_array_dim_size = ctx->get_gen_policy()->get_min_array_dim_size();
     size_t max_array_dim_size = ctx->get_gen_policy()->get_max_array_dim_size();
-    assert(min_array_dim_size< max_array_dim_size);
-    size_t free_chunk_start = dim_num * min_array_dim_size;
-    size_t free_chunk_end = std::min(dim_num * max_array_dim_size, ctx->get_gen_policy()->get_max_array_total_size());
-    if (free_chunk_start > free_chunk_end) {
-        std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ": free_chunk_start should be less than free_chunk_end" << std::endl;
-        exit(-1);
-    }
-    size_t free_chunk = free_chunk_end - free_chunk_start;
-    std::vector<std::pair<uint32_t, size_t >> raw_results;
-    for (uint32_t i = 0; i < dim_num; ++i)
-        raw_results.push_back(std::pair<uint32_t, size_t>(i, min_array_dim_size));
+    assert(min_array_dim_size < max_array_dim_size);
+    size_t max_total_size = std::min((size_t)std::pow(max_array_dim_size, dim_num), ctx->get_gen_policy()->get_max_array_total_size());
+    size_t max_total_desired_size = rand_val_gen->get_rand_value((size_t) 1, max_total_size);
+    size_t actual_quant = rand_val_gen->get_rand_array_dim_size(max_array_dim_size);
 
-    std::vector<size_t> results (dim_num, 0);
-    uint32_t distrib_dim_num = rand_val_gen->get_rand_value<uint32_t>(1U, dim_num * 4); // Magic number
-    size_t delta = round((double)free_chunk / distrib_dim_num);
-    for (size_t i = 0; i < free_chunk; i += delta) {
-        uint32_t idx = rand_val_gen->get_rand_value<uint32_t>(0, raw_results.size() - 1);
-        if (raw_results.at(idx).second + delta >= max_array_dim_size) {
-            results.at(raw_results.at(idx).first) = max_array_dim_size;
-            raw_results.erase(raw_results.begin() + idx);
+    std::vector<size_t> results (dim_num, min_array_dim_size);
+    std::pair<size_t, size_t> next_state = std::make_pair(0, min_array_dim_size);
+    size_t total_actual_size = 1;
+    do {
+        results.at(next_state.first) = next_state.second;
+        size_t idx = rand_val_gen->get_rand_id(dim_probability);
+        next_state = std::make_pair(idx, results.at(idx) + actual_quant);
+        if (next_state.second > max_array_dim_size)
+            break;
+
+        total_actual_size = 1;
+        for (int j = 0; j < dim_num; ++j) {
+            if (j == next_state.first)
+                total_actual_size *= next_state.second;
+            else
+                total_actual_size *= results.at(j);
         }
-        else
-            raw_results.at(idx).second += delta;
     }
+    while (total_actual_size < max_total_desired_size);
     return results;
 }

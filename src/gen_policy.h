@@ -17,6 +17,7 @@ limitations under the License.
 //////////////////////////////////////////////////////////////////////////////
 #pragma once
 
+#include <cassert>
 #include <random>
 #include <algorithm>
 #include <iostream>
@@ -28,6 +29,7 @@ limitations under the License.
 #include "stmt.h"
 
 ///////////////////////////////////////////////////////////////////////////////
+static const double ARRAY_DIM_DIS_MAGIC_NUM = 40.0;
 
 namespace rl {
 
@@ -87,6 +89,17 @@ class RandValGen {
                 new_prob.at(discrete_dis(rand_gen)).increase_prob(delta);
 
             prob_vec = new_prob;
+        }
+
+        // Generation of array dimension's size is a bit tricky. For them uniform distribution is not enough.
+        size_t get_rand_array_dim_size (size_t limit_per_dim) {
+            assert(limit_per_dim > 1);
+            std::exponential_distribution<double> exp_distr (ARRAY_DIM_DIS_MAGIC_NUM / limit_per_dim);
+            size_t result = 0;
+            do
+                result = (size_t) exp_distr(rand_gen);
+            while ((result < 1) || (result > limit_per_dim));
+            return result;
         }
 
     private:
