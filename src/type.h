@@ -369,7 +369,10 @@ class TypeCHAR : public IntegerType {
 
     private:
         void init_type () {
-            name = "signed char";
+            if (!options->is_opencl())
+                name = "signed char";
+            else
+                name = "char";
             suffix = "";
             min.val.char_val = SCHAR_MIN;
             max.val.char_val = SCHAR_MAX;
@@ -477,7 +480,7 @@ class TypeLINT : public IntegerType {
 
     private:
         void init_type () {
-            name = "long int";
+            name = "long";
             suffix = "L";
             if (options->mode_64bit) {
                 bit_size = sizeof(long long int) * CHAR_BIT;
@@ -502,7 +505,7 @@ class TypeULINT : public IntegerType {
 
     private:
         void init_type () {
-            name = "unsigned long int";
+            name = "unsigned long";
             suffix = "UL";
             if (options->mode_64bit) {
                 bit_size = sizeof (unsigned long long int) * CHAR_BIT;
@@ -527,7 +530,7 @@ class TypeLLINT : public IntegerType {
 
     private:
         void init_type () {
-            name = "long long int";
+            name = "long long";
             suffix = "LL";
             min.val.llint_val = LLONG_MIN;
             max.val.llint_val = LLONG_MAX;
@@ -545,7 +548,7 @@ class TypeULLINT : public IntegerType {
 
     private:
         void init_type () {
-            name = "unsigned long long int";
+            name = "unsigned long long";
             suffix = "ULL";
             min.val.ullint_val = 0;
             max.val.ullint_val = ULLONG_MAX;

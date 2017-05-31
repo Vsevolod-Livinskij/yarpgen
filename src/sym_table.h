@@ -57,6 +57,16 @@ class SymbolTable {
         std::string emit_struct_init (std::string offset = "");
         std::string emit_struct_check (std::string offset = "");
 
+        std::string emit_ocl_additional_data_decl (std::string offset = "");
+        enum OCL_Data_Type {
+            RONLY, WONLY, RW
+        };
+        std::string emit_ocl_data_init (OCL_Data_Type ocl_data_type, std::string offset = "");
+        std::string emit_ocl_kernel_args ();
+        std::string emit_ocl_single_struct_check (std::string base_string, std::string memb_path,
+                                                  std::shared_ptr<Struct> struct_var, std::string offset);
+        std::string emit_ocl_data_check (std::string offset = "");
+
     private:
         void form_struct_member_expr (std::shared_ptr<MemberExpr> parent_memb_expr, std::shared_ptr<Struct> struct_var, bool ignore_const = false);
         std::string emit_single_struct_init (std::shared_ptr<MemberExpr> parent_memb_expr, std::shared_ptr<Struct> struct_var, std::string offset = "");

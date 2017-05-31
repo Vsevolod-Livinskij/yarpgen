@@ -55,13 +55,15 @@ class Expr : public Node {
 // by this class. For example, assignment to the variable may use VarUseExpr as lhs.
 class VarUseExpr : public Expr {
     public:
-        VarUseExpr (std::shared_ptr<Data> _var);
+        VarUseExpr (std::shared_ptr<Data> _var, bool _ocl_hack = false);
         std::shared_ptr<Expr> set_value (std::shared_ptr<Expr> _expr);
-        std::string emit (std::string offset = "") { return value->get_name (); }
+        std::string emit (std::string offset = "");
 
     private:
         bool propagate_type () { return true; }
         UB propagate_value () { return NoUB; }
+        // Every instance of running should have its own data, so inp and mix variables should have subscript expression with GID
+        bool ocl_hack;
 };
 
 // Assignment expression represents assignment of one expression to another.
@@ -224,7 +226,7 @@ class BinaryExpr : public ArithExpr {
 // E.g.: struct_obj.member_1
 class MemberExpr : public Expr {
     public:
-        MemberExpr (std::shared_ptr<Struct> _struct, uint64_t _identifier);
+        MemberExpr (std::shared_ptr<Struct> _struct, uint64_t _identifier, bool _ocl_hack = false);
         MemberExpr (std::shared_ptr<MemberExpr> _member_expr, uint64_t _identifier);
         std::shared_ptr<Expr> set_value (std::shared_ptr<Expr> _expr);
         std::string emit (std::string offset = "");
@@ -233,6 +235,7 @@ class MemberExpr : public Expr {
         bool propagate_type ();
         UB propagate_value ();
         std::shared_ptr<Expr> check_and_set_bit_field (std::shared_ptr<Expr> _expr);
+        bool ocl_hack;
 
         std::shared_ptr<MemberExpr> member_expr;
         std::shared_ptr<Struct> struct_var;

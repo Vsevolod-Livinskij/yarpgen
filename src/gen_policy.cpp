@@ -93,7 +93,7 @@ void GenPolicy::init_from_config () {
     allowed_cv_qual.push_back (Type::CV_Qual::NTHG);
 
     allow_static_var = false;
-    if (options->is_c())
+    if (options->is_c() || options->is_opencl())
         allow_static_members = false;
     else if (options->is_cxx())
         allow_static_members = true;
@@ -123,12 +123,19 @@ void GenPolicy::init_from_config () {
     member_class_prob.push_back(Probability<Data::VarClassID>(Data::VarClassID::VAR, 70));
     member_class_prob.push_back(Probability<Data::VarClassID>(Data::VarClassID::STRUCT, 30));
     rand_val_gen->shuffle_prob(member_class_prob);
-    min_bit_field_size = MIN_BIT_FIELD_SIZE;
-    max_bit_field_size = MAX_BIT_FIELD_SIZE;
-    bit_field_prob.push_back(Probability<BitFieldID>(UNNAMED, 15));
-    bit_field_prob.push_back(Probability<BitFieldID>(NAMED, 20));
-    bit_field_prob.push_back(Probability<BitFieldID>(MAX_BIT_FIELD_ID, 65));
-    rand_val_gen->shuffle_prob(bit_field_prob);
+    if (!options->is_opencl() && !(options->c_compatible_with_ocl && options->is_c())) {
+        min_bit_field_size = MIN_BIT_FIELD_SIZE;
+        max_bit_field_size = MAX_BIT_FIELD_SIZE;
+        bit_field_prob.push_back(Probability<BitFieldID>(UNNAMED, 15));
+        bit_field_prob.push_back(Probability<BitFieldID>(NAMED, 20));
+        bit_field_prob.push_back(Probability<BitFieldID>(MAX_BIT_FIELD_ID, 65));
+        rand_val_gen->shuffle_prob(bit_field_prob);
+    }
+    else {
+        min_bit_field_size = 0;
+        max_bit_field_size = 0;
+        bit_field_prob.push_back(Probability<BitFieldID>(MAX_BIT_FIELD_ID, 100));
+    }
 
     out_data_type_prob.push_back(Probability<OutDataTypeID>(VAR, 70));
     out_data_type_prob.push_back(Probability<OutDataTypeID>(STRUCT, 30));
@@ -324,7 +331,9 @@ void GenPolicy::rand_init_allowed_int_types () {
     int gen_types = 0;
     while (gen_types < num_of_allowed_int_types) {
         IntegerType::IntegerTypeID type = (IntegerType::IntegerTypeID) rand_val_gen->get_rand_value<int>(0, IntegerType::IntegerTypeID::MAX_INT_ID - 1);
-        if (type == IntegerType::IntegerTypeID::BOOL && options->is_c())
+        if (((options->is_c() || options->is_opencl()) && type == IntegerType::IntegerTypeID::BOOL) ||
+            ((options->is_opencl() || (options->c_compatible_with_ocl && options->is_c())) &&
+            type == IntegerType::IntegerTypeID::ULLINT))
             continue;
         if (std::find(tmp_allowed_int_types.begin(), tmp_allowed_int_types.end(), type) == tmp_allowed_int_types.end()) {
             tmp_allowed_int_types.push_back (type);

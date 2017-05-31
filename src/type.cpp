@@ -89,7 +89,7 @@ std::string StructType::StructMember::get_definition (std::string offset) {
 
 std::string StructType::get_definition (std::string offset) {
     std::string ret = "";
-    if (options->is_c())
+    if (options->is_c() || options->is_opencl())
         ret += "typedef ";
     ret += "struct ";
     if (options->is_cxx())
@@ -99,7 +99,7 @@ std::string StructType::get_definition (std::string offset) {
         ret += i->get_definition(offset + "    ") + ";\n";
     }
     ret += "}";
-    if (options->is_c())
+    if (options->is_c() || options->is_opencl())
         ret += " " + name;
     ret += ";\n";
     return ret;
@@ -172,6 +172,9 @@ std::shared_ptr<StructType> StructType::generate (std::shared_ptr<Context> ctx, 
             }
             else {
                 GenPolicy::BitFieldID bit_field_dis = rand_val_gen->get_rand_id(p->get_bit_field_prob());
+                // OpenCL doesn't support bit-fields
+                if (options->is_opencl())
+                    bit_field_dis = GenPolicy::BitFieldID::MAX_BIT_FIELD_ID;
                 // In C, bit-field may be declared with a type other than unsigned int or signed int
                 // only with "J.5.8 Extended bit-field types"
                 if (options->is_c()) {
@@ -543,7 +546,7 @@ void BuiltinType::ScalarTypedVal::set_abs_val (uint64_t new_val) {
 
 BuiltinType::ScalarTypedVal BuiltinType::ScalarTypedVal::operator! () {
     Type::IntegerTypeID ret_type_id = Type::IntegerTypeID::BOOL;
-    if (options->is_c())
+    if (options->is_c() || options->is_opencl())
         ret_type_id = Type::IntegerTypeID::INT;
     BuiltinType::ScalarTypedVal ret = BuiltinType::ScalarTypedVal(ret_type_id);
     switch (int_type_id) {
@@ -553,7 +556,7 @@ BuiltinType::ScalarTypedVal BuiltinType::ScalarTypedVal::operator! () {
                 break;
             }
         case IntegerType::IntegerTypeID::INT:
-            if (options->is_c()) {
+            if (options->is_c() || options->is_opencl()) {
                 ret.val.int_val = !val.int_val;
                 break;
             }
@@ -1036,7 +1039,7 @@ ScalarTypedValCmpOp(!=)
 #define ScalarTypedValLogOp(__op__)                                                                 \
 BuiltinType::ScalarTypedVal BuiltinType::ScalarTypedVal::operator __op__ (ScalarTypedVal rhs) {     \
     Type::IntegerTypeID ret_type_id = Type::IntegerTypeID::BOOL;                                    \
-    if (options->is_c())                                                                            \
+    if (options->is_c() || options->is_opencl())                                                    \
         ret_type_id = Type::IntegerTypeID::INT;                                                     \
     BuiltinType::ScalarTypedVal ret = BuiltinType::ScalarTypedVal(ret_type_id);                     \
                                                                                                     \
@@ -1047,7 +1050,7 @@ BuiltinType::ScalarTypedVal BuiltinType::ScalarTypedVal::operator __op__ (Scalar
                 break;                                                                              \
             }                                                                                       \
         case IntegerType::IntegerTypeID::INT:                                                       \
-            if (options->is_c()) {                                                                  \
+            if (options->is_c() || options->is_opencl()) {                                          \
                 ret.val.int_val = val.int_val __op__ rhs.val.int_val;                               \
                 break;                                                                              \
             }                                                                                       \

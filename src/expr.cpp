@@ -63,7 +63,14 @@ std::shared_ptr<Expr> VarUseExpr::set_value (std::shared_ptr<Expr> _expr) {
     }
 }
 
-VarUseExpr::VarUseExpr(std::shared_ptr<Data> _var) : Expr(Node::NodeID::VAR_USE, _var) {
+std::string VarUseExpr::emit (std::string offset) {
+    std::string ret = value->get_name ();
+    if (options->is_opencl() && ocl_hack)
+        ret += " [gid]";
+    return ret;
+}
+
+VarUseExpr::VarUseExpr(std::shared_ptr<Data> _var, bool _ocl_hack) : Expr(Node::NodeID::VAR_USE, _var), ocl_hack(_ocl_hack) {
 }
 
 AssignExpr::AssignExpr (std::shared_ptr<Expr> _to, std::shared_ptr<Expr> _from, bool _taken) :
@@ -245,7 +252,7 @@ std::shared_ptr<Expr> ArithExpr::conv_to_bool (std::shared_ptr<Expr> arg) {
     }
 
     IntegerType::IntegerTypeID to_type = IntegerType::IntegerTypeID::BOOL;
-    if (options->is_c())
+    if (options->is_c() || options->is_opencl())
         to_type = IntegerType::IntegerTypeID::INT;
 
     if (arg->get_value()->get_type()->get_int_type_id() == to_type) // can't perform integral promotion
@@ -1025,7 +1032,10 @@ std::string MemberExpr::emit (std::string offset) {
         if (struct_var->get_member_count() <= identifier) {
             ERROR("bad identifier (MemberExpr)");
         }
-        ret += struct_var->get_name() + "." + struct_var->get_member(identifier)->get_name();
+        ret += struct_var->get_name();
+        if (options->is_opencl() && ocl_hack)
+            ret += " [gid]";
+        ret += "." + struct_var->get_member(identifier)->get_name();
     }
     else {
         std::shared_ptr<Data> member_expr_data = member_expr->get_value();
@@ -1041,8 +1051,8 @@ std::string MemberExpr::emit (std::string offset) {
     return ret;
 }
 
-MemberExpr::MemberExpr(std::shared_ptr<Struct> _struct, uint64_t _identifier) :
-        Expr(Node::NodeID::MEMBER, _struct), member_expr(nullptr), struct_var(_struct), identifier(_identifier) {
+MemberExpr::MemberExpr(std::shared_ptr<Struct> _struct, uint64_t _identifier, bool _ocl_hack) :
+        Expr(Node::NodeID::MEMBER, _struct), ocl_hack(_ocl_hack), member_expr(nullptr), struct_var(_struct), identifier(_identifier) {
     propagate_type();
     propagate_value();
 }

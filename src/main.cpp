@@ -64,11 +64,12 @@ void print_usage_and_exit (std::string error_msg = "") {
     printVersion();
     std::cout << "usage: yarpgen\n";
     std::cout << "\t-q                        Quiet mode\n";
-    std::cout << "\t-v, --version             Print yarpgen version\n";
+    std::cout << "\t-v, -version              Print yarpgen version\n";
     std::cout << "\t-d, -out-dir=<out-dir>    Output directory\n";
     std::cout << "\t-s, -seed=<seed>          Predefined seed\n";
     std::cout << "\t-m, -bit-mode=<32/64>     Generated test's bit mode\n";
     std::cout << "\t-std=<standard>           Generated test's language standard\n";
+    std::cout << "\t-c-compat-ocl             Generate C test to compare result with OpenCL\n";
     auto search_for_default_std = [] (const std::pair<std::string, Options::StandardID> &pair) {
         return pair.second == options->standard_id;
     };
@@ -180,6 +181,9 @@ int main (int argc, char* argv[128]) {
         }
         else if (!strcmp(argv[i], "-q")) {
             quiet = true;
+        }
+        else if (!strcmp(argv[i], "-c-compat-ocl")) {
+            options->c_compatible_with_ocl = true;
         }
         else if (parse_long_args(i, argv, "-std", standard_action,
                                  "Can't recognize language standard:")) {}

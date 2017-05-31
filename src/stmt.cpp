@@ -137,7 +137,8 @@ std::shared_ptr<ScopeStmt> ScopeStmt::generate (std::shared_ptr<Context> ctx) {
                 // Use mixed variable or we don't have any suitable members
                 if (out_data_type == GenPolicy::OutDataTypeID::VAR || ctx->get_extern_mix_sym_table()->get_avail_members().size() == 0) {
                     int mix_num = rand_val_gen->get_rand_value<int>(0, ctx->get_extern_mix_sym_table()->get_variables().size() - 1);
-                    assign_lhs = std::make_shared<VarUseExpr>(ctx->get_extern_mix_sym_table()->get_variables().at(mix_num));
+                    assign_lhs = std::make_shared<VarUseExpr>(ctx->get_extern_mix_sym_table()->get_variables().at(mix_num),
+                                                              options->is_opencl());
                 }
                 // Use member of mixed struct
                 else {
@@ -150,7 +151,7 @@ std::shared_ptr<ScopeStmt> ScopeStmt::generate (std::shared_ptr<Context> ctx) {
                 if (out_data_type == GenPolicy::OutDataTypeID::VAR || ctx->get_extern_out_sym_table()->get_avail_members().size() == 0) {
                     std::shared_ptr<ScalarVariable> out_var = ScalarVariable::generate(ctx);
                     ctx->get_extern_out_sym_table()->add_variable (out_var);
-                    assign_lhs = std::make_shared<VarUseExpr>(out_var);
+                    assign_lhs = std::make_shared<VarUseExpr>(out_var, options->is_opencl());
                 }
                 // Use member of output struct
                 else {
@@ -183,7 +184,7 @@ std::shared_ptr<ScopeStmt> ScopeStmt::generate (std::shared_ptr<Context> ctx) {
 std::vector<std::shared_ptr<Expr>> ScopeStmt::extract_inp_from_ctx(std::shared_ptr<Context> ctx) {
     std::vector<std::shared_ptr<Expr>> ret;
     for (auto i : ctx->get_extern_inp_sym_table()->get_variables()) {
-        ret.push_back(std::make_shared<VarUseExpr> (i));
+        ret.push_back(std::make_shared<VarUseExpr> (i, true));
     }
 
     for (auto i : ctx->get_extern_inp_sym_table()->get_avail_const_members()) {
@@ -201,7 +202,7 @@ std::vector<std::shared_ptr<Expr>> ScopeStmt::extract_inp_and_mix_from_ctx(std::
         ret.push_back(i);
     }
     for (auto i : ctx->get_extern_mix_sym_table()->get_variables()) {
-        ret.push_back(std::make_shared<VarUseExpr> (i));
+        ret.push_back(std::make_shared<VarUseExpr> (i, true));
     }
     if (ctx->get_parent_ctx() != nullptr)
         ret = extract_inp_and_mix_from_ctx(ctx->get_parent_ctx());

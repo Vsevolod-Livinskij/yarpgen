@@ -19,6 +19,7 @@ limitations under the License.
 #include <cassert>
 
 #include "sym_table.h"
+#include "util.h"
 
 using namespace yarpgen;
 
@@ -36,7 +37,7 @@ void SymbolTable::form_struct_member_expr (std::shared_ptr<MemberExpr> parent_me
             if (parent_memb_expr != nullptr)
                 member_expr = std::make_shared<MemberExpr>(parent_memb_expr, j);
             else
-                member_expr = std::make_shared<MemberExpr>(struct_var, j);
+                member_expr = std::make_shared<MemberExpr>(struct_var, j, options->is_opencl());
 
             bool is_static = struct_var->get_member(j)->get_type()->get_is_static();
 
@@ -166,6 +167,141 @@ std::string SymbolTable::emit_variable_check (std::string offset) {
     for (auto i = variable.begin(); i != variable.end(); ++i) {
         ret += offset + "hash(&seed, " + (*i)->get_name() + ");\n";
     }
+    return ret;
+}
+
+std::string SymbolTable::emit_ocl_additional_data_decl (std::string offset) {
+    std::string ret = "";
+    auto ocl_data_decl_printer = [offset] (std::string var_name, std::string type_name) -> std::string {
+        return offset + "cl_mem " + var_name + "_ocl;\n" +
+               offset + type_name + "* " + var_name + "_arr;\n";
+    };
+    for (auto const &i : variable)
+        ret += ocl_data_decl_printer(i->get_name(), i->get_type()->get_simple_name());
+    for (auto const &i : structs)
+        ret += ocl_data_decl_printer(i->get_name(), i->get_type()->get_simple_name());
+
+    return ret;
+}
+
+static unsigned long int kernel_arg_count = 0;
+
+std::string SymbolTable::emit_ocl_data_init (OCL_Data_Type ocl_data_type, std::string offset) {
+    std::string ocl_data_type_str = "";
+    switch (ocl_data_type) {
+        case RONLY:
+            ocl_data_type_str = "CL_MEM_READ_ONLY";
+            break;
+        case WONLY:
+            ocl_data_type_str = "CL_MEM_WRITE_ONLY";
+            break;
+        case RW:
+            ocl_data_type_str = "CL_MEM_READ_WRITE";
+            break;
+        default:
+            ERROR("can't detect OpenCL data type");
+    }
+    std::string ret = "";
+    auto call_printer_for_all_data = [this] (auto printer) -> std::string {
+        std::string tmp_ret = "";
+        for (auto const &i : variable)
+            tmp_ret += printer(i->get_name(), i->get_type()->get_simple_name());
+        for (auto const &i : structs)
+            tmp_ret += printer(i->get_name(), i->get_type()->get_simple_name());
+        return tmp_ret;
+    };
+
+    auto ocl_data_alloc_printer = [offset, ocl_data_type_str] (std::string var_name, std::string type_name) -> std::string {
+        return offset + var_name + "_ocl = clCreateBuffer(context," + ocl_data_type_str + ", " +
+               "sizeof(" + type_name + ") * count, NULL, NULL);\n" +
+               offset + var_name + "_arr = calloc(count, sizeof(" + type_name + "));\n";
+    };
+    ret += call_printer_for_all_data(ocl_data_alloc_printer);
+
+    ret += offset + "for (int i = 0; i < count; ++i) {\n";
+    auto arr_init_printer = [offset] (std::string var_name, std::string type_name) -> std::string {
+        return offset + "    " + var_name + "_arr [i] = " + var_name + ";\n";
+    };
+    ret += call_printer_for_all_data(arr_init_printer);
+    ret += offset + "}\n";
+
+    auto ocl_data_to_kernel_printer = [offset] (std::string var_name, std::string type_name) -> std::string {
+        return offset + "clEnqueueWriteBuffer(commands, " + var_name + "_ocl, CL_TRUE, 0, " +
+               "sizeof(" + type_name + ") * count, " + var_name + "_arr, 0, NULL, NULL);\n" +
+               offset + "clSetKernelArg(kernel, " + std::to_string(kernel_arg_count++) + ", sizeof(cl_mem), " +
+               "&" + var_name + "_ocl);\n";
+    };
+    ret += call_printer_for_all_data(ocl_data_to_kernel_printer);
+    return ret;
+}
+
+std::string SymbolTable::emit_ocl_kernel_args () {
+    std::string ret = "";
+    auto ocl_kernel_args_printer = [] (std::string var_name, std::string type_name) -> std::string {
+        return "__global " + type_name + "* " + var_name + ", ";
+    };
+    for (auto const &i : variable)
+        ret += ocl_kernel_args_printer(i->get_name(), i->get_type()->get_simple_name());
+    for (auto const &i : structs)
+        ret += ocl_kernel_args_printer(i->get_name(), i->get_type()->get_simple_name());
+    if (ret.length() > 0)
+        ret.erase(ret.length() - 2);
+    return ret;
+}
+
+std::string SymbolTable::emit_ocl_single_struct_check (std::string base_string, std::string memb_path,
+                                                       std::shared_ptr<Struct> struct_var, std::string offset) {
+    std::string ret = "";
+    for (int j = 0; j < struct_var->get_member_count(); ++j) {
+        std::shared_ptr<Data> member = struct_var->get_member(j);
+        if (member->get_type()->is_struct_type())
+            ret += emit_ocl_single_struct_check(base_string, memb_path + "." + member->get_name(),
+                                                std::static_pointer_cast<Struct>(member), offset);
+        else
+            ret += offset + "fail |= " + base_string + "_arr [i]" + memb_path + "." + member->get_name() +
+                   " != " + base_string + "_arr [i - 1]" + memb_path + "." + member->get_name() + ";\n";
+    }
+    return ret;
+}
+
+std::string SymbolTable::emit_ocl_data_check (std::string offset) {
+    std::string ret = "";
+    auto call_printer_for_all_data = [this] (auto printer) -> std::string {
+        std::string tmp_ret = "";
+        for (auto const &i : variable)
+            tmp_ret += printer(i->get_name(), i->get_type()->get_simple_name());
+        for (auto const &i : structs)
+            tmp_ret += printer(i->get_name(), i->get_type()->get_simple_name());
+        return tmp_ret;
+    };
+
+    auto ocl_buf_read_printer = [offset] (std::string var_name, std::string type_name) -> std::string {
+        return offset + "clEnqueueReadBuffer(commands, " + var_name + "_ocl, CL_TRUE, 0, " +
+               "sizeof(" + type_name + ") * count, " + var_name + "_arr, 0, NULL, NULL );\n";
+    };
+    ret += call_printer_for_all_data(ocl_buf_read_printer);
+    ret += "\n";
+
+    ret += offset + "for (int i = 1; i < count; i++) {\n";
+    auto arr_check_printer = [offset] (std::string var_name) -> std::string {
+        return offset + "    fail |= " + var_name + "_arr [i] != " + var_name + "_arr [i - 1];\n";
+    };
+    for (auto const &i : variable)
+        ret += arr_check_printer(i->get_name());
+    for (auto const &i : structs) {
+        ret += emit_ocl_single_struct_check(i->get_name(), "", i, offset + "    ");
+    }
+    ret += offset + "}\n\n";
+
+    ret += offset + "if (fail) hash(&seed, fail);\n\n";
+
+    auto ocl_data_free_printer = [offset] (std::string var_name, std::string type_name) -> std::string {
+        return offset + var_name + " = " + var_name + "_arr [0];\n" +
+               offset + "free (" + var_name + "_arr);\n" +
+               offset + "clReleaseMemObject(" + var_name + "_ocl);\n";
+    };
+    ret += call_printer_for_all_data(ocl_data_free_printer);
+    ret += "\n";
     return ret;
 }
 
