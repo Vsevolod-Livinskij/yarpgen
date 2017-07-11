@@ -1,0 +1,1520 @@
+Index: include/llvm/Transforms/Scalar/Float2Int.h
+===================================================================
+--- include/llvm/Transforms/Scalar/Float2Int.h	(revision 307265)
++++ include/llvm/Transforms/Scalar/Float2Int.h	(working copy)
+@@ -39,7 +39,7 @@
+   void walkForwards();
+   bool validateAndTransform();
+   Value *convert(Instruction *I, Type *ToTy);
+-  void cleanup();
++  void cleanup(Function &F);
+ 
+   MapVector<Instruction *, ConstantRange> SeenInsts;
+   SmallPtrSet<Instruction *, 8> Roots;
+Index: lib/Transforms/Scalar/ADCE.cpp
+===================================================================
+--- lib/Transforms/Scalar/ADCE.cpp	(revision 307265)
++++ lib/Transforms/Scalar/ADCE.cpp	(working copy)
+@@ -23,6 +23,7 @@
+ #include "llvm/ADT/Statistic.h"
+ #include "llvm/Analysis/GlobalsModRef.h"
+ #include "llvm/Analysis/IteratedDominanceFrontier.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/PostDominators.h"
+ #include "llvm/IR/BasicBlock.h"
+ #include "llvm/IR/CFG.h"
+@@ -517,7 +518,9 @@
+     I.dropAllReferences();
+   }
+ 
++  OptimizationRemarkEmitter ORE (&F);
+   for (Instruction *&I : Worklist) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "ADCE", I) << "ADCE was applied");
+     ++NumRemoved;
+     I->eraseFromParent();
+   }
+Index: lib/Transforms/Scalar/AlignmentFromAssumptions.cpp
+===================================================================
+--- lib/Transforms/Scalar/AlignmentFromAssumptions.cpp	(revision 307265)
++++ lib/Transforms/Scalar/AlignmentFromAssumptions.cpp	(working copy)
+@@ -25,6 +25,7 @@
+ #include "llvm/Analysis/AssumptionCache.h"
+ #include "llvm/Analysis/GlobalsModRef.h"
+ #include "llvm/Analysis/LoopInfo.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/ScalarEvolutionExpressions.h"
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/IR/Constant.h"
+@@ -291,6 +292,8 @@
+   return true;
+ }
+ 
++static OptimizationRemarkEmitter *ORE = nullptr;
++
+ bool AlignmentFromAssumptionsPass::processAssumption(CallInst *ACall) {
+   Value *AAPtr;
+   const SCEV *AlignSCEV, *OffSCEV;
+@@ -319,6 +322,9 @@
+   while (!WorkList.empty()) {
+     Instruction *J = WorkList.pop_back_val();
+ 
++    assert(ORE && "ORE can't be NULL");
++    ORE->emit(OptimizationRemark(DEBUG_TYPE, "AlignmentFromAssumptions", J) << "alignment-from-assumptions was applied");
++
+     if (LoadInst *LI = dyn_cast<LoadInst>(J)) {
+       unsigned NewAlignment = getNewAlignment(AASCEV, AlignSCEV, OffSCEV,
+         LI->getPointerOperand(), SE);
+@@ -425,10 +431,12 @@
+   NewSrcAlignments.clear();
+ 
+   bool Changed = false;
++  ORE = new OptimizationRemarkEmitter(&F);
+   for (auto &AssumeVH : AC.assumptions())
+     if (AssumeVH)
+       Changed |= processAssumption(cast<CallInst>(AssumeVH));
+-
++  delete (ORE);
++  ORE = nullptr;
+   return Changed;
+ }
+ 
+Index: lib/Transforms/Scalar/BDCE.cpp
+===================================================================
+--- lib/Transforms/Scalar/BDCE.cpp	(revision 307265)
++++ lib/Transforms/Scalar/BDCE.cpp	(working copy)
+@@ -19,6 +19,7 @@
+ #include "llvm/ADT/Statistic.h"
+ #include "llvm/Analysis/DemandedBits.h"
+ #include "llvm/Analysis/GlobalsModRef.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/IR/CFG.h"
+ #include "llvm/IR/InstIterator.h"
+ #include "llvm/IR/Instructions.h"
+@@ -38,6 +39,7 @@
+ static bool bitTrackingDCE(Function &F, DemandedBits &DB) {
+   SmallVector<Instruction*, 128> Worklist;
+   bool Changed = false;
++  OptimizationRemarkEmitter ORE (&F);
+   for (Instruction &I : instructions(F)) {
+     // If the instruction has side effects and no non-dbg uses,
+     // skip it. This way we avoid computing known bits on an instruction
+@@ -56,6 +58,7 @@
+       // undef, poison, etc.
+       Value *Zero = ConstantInt::get(I.getType(), 0);
+       ++NumSimplified;
++      ORE.emit(OptimizationRemark(DEBUG_TYPE, "BDCE", &I) << "BDCE was applied");
+       I.replaceNonMetadataUsesWith(Zero);
+       Changed = true;
+     }
+@@ -68,6 +71,7 @@
+   }
+ 
+   for (Instruction *&I : Worklist) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "BDCE", I) << "BDCE was applied");
+     ++NumRemoved;
+     I->eraseFromParent();
+   }
+Index: lib/Transforms/Scalar/ConstantHoisting.cpp
+===================================================================
+--- lib/Transforms/Scalar/ConstantHoisting.cpp	(revision 307265)
++++ lib/Transforms/Scalar/ConstantHoisting.cpp	(working copy)
+@@ -37,6 +37,7 @@
+ #include "llvm/ADT/SmallSet.h"
+ #include "llvm/ADT/SmallVector.h"
+ #include "llvm/ADT/Statistic.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/IR/Constants.h"
+ #include "llvm/IR/GetElementPtrTypeIterator.h"
+ #include "llvm/IR/IntrinsicInst.h"
+@@ -698,6 +699,8 @@
+   }
+ }
+ 
++static OptimizationRemarkEmitter *ORE = nullptr;
++
+ /// \brief Hoist and hide the base constant behind a bitcast and emit
+ /// materialization code for derived constants.
+ bool ConstantHoistingPass::emitBaseConstants() {
+@@ -740,6 +743,8 @@
+       assert(isa<Instruction>(Base->user_back()) &&
+              "All uses should be instructions.");
+       Base->setDebugLoc(cast<Instruction>(Base->user_back())->getDebugLoc());
++
++      ORE->emit(OptimizationRemark(DEBUG_TYPE, "ConstHoist", IP) << "consthoist was applied");
+     }
+     (void)UsesNum;
+     (void)ReBasesNum;
+@@ -788,10 +793,15 @@
+   if (ConstantVec.empty())
+     return false;
+ 
++  ORE = new OptimizationRemarkEmitter (&Fn);
++
+   // Finally hoist the base constant and emit materialization code for dependent
+   // constants.
+   bool MadeChange = emitBaseConstants();
+ 
++  delete (ORE);
++  ORE = nullptr;
++
+   // Cleanup dead instructions.
+   deleteDeadCastInst();
+ 
+Index: lib/Transforms/Scalar/ConstantProp.cpp
+===================================================================
+--- lib/Transforms/Scalar/ConstantProp.cpp	(revision 307265)
++++ lib/Transforms/Scalar/ConstantProp.cpp	(working copy)
+@@ -20,6 +20,7 @@
+ 
+ #include "llvm/ADT/Statistic.h"
+ #include "llvm/Analysis/ConstantFolding.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/TargetLibraryInfo.h"
+ #include "llvm/IR/Constant.h"
+ #include "llvm/IR/InstIterator.h"
+@@ -75,6 +76,8 @@
+   TargetLibraryInfo *TLI =
+       &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI();
+ 
++  OptimizationRemarkEmitter ORE (&F);
++
+   while (!WorkList.empty()) {
+     Instruction *I = *WorkList.begin();
+     WorkList.erase(WorkList.begin());    // Get an element from the worklist...
+@@ -81,6 +84,7 @@
+ 
+     if (!I->use_empty())                 // Don't muck with dead instructions...
+       if (Constant *C = ConstantFoldInstruction(I, DL, TLI)) {
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "ConstProp", I) << "ConstProp was applied");
+         // Add all of the users of this instruction to the worklist, they might
+         // be constant propagatable now...
+         for (User *U : I->users())
+Index: lib/Transforms/Scalar/CorrelatedValuePropagation.cpp
+===================================================================
+--- lib/Transforms/Scalar/CorrelatedValuePropagation.cpp	(revision 307265)
++++ lib/Transforms/Scalar/CorrelatedValuePropagation.cpp	(working copy)
+@@ -17,6 +17,7 @@
+ #include "llvm/Analysis/GlobalsModRef.h"
+ #include "llvm/Analysis/InstructionSimplify.h"
+ #include "llvm/Analysis/LazyValueInfo.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/IR/CFG.h"
+ #include "llvm/IR/ConstantRange.h"
+ #include "llvm/IR/Constants.h"
+@@ -488,6 +489,8 @@
+ 
+ static bool runImpl(Function &F, LazyValueInfo *LVI, const SimplifyQuery &SQ) {
+   bool FnChanged = false;
++  OptimizationRemarkEmitter ORE (&F);
++
+   // Visiting in a pre-order depth-first traversal causes us to simplify early
+   // blocks before querying later blocks (which require us to analyze early
+   // blocks).  Eagerly simplifying shallow blocks means there is strictly less
+@@ -495,46 +498,51 @@
+   // blocks. 
+   for (BasicBlock *BB : depth_first(&F.getEntryBlock())) {
+     bool BBChanged = false;
++    bool Changed = false;
+     for (BasicBlock::iterator BI = BB->begin(), BE = BB->end(); BI != BE;) {
+       Instruction *II = &*BI++;
+       switch (II->getOpcode()) {
+       case Instruction::Select:
+-        BBChanged |= processSelect(cast<SelectInst>(II), LVI);
++        Changed = processSelect(cast<SelectInst>(II), LVI);
+         break;
+       case Instruction::PHI:
+-        BBChanged |= processPHI(cast<PHINode>(II), LVI, SQ);
++        Changed = processPHI(cast<PHINode>(II), LVI, SQ);
+         break;
+       case Instruction::ICmp:
+       case Instruction::FCmp:
+-        BBChanged |= processCmp(cast<CmpInst>(II), LVI);
++        Changed = processCmp(cast<CmpInst>(II), LVI);
+         break;
+       case Instruction::Load:
+       case Instruction::Store:
+-        BBChanged |= processMemAccess(II, LVI);
++        Changed = processMemAccess(II, LVI);
+         break;
+       case Instruction::Call:
+       case Instruction::Invoke:
+-        BBChanged |= processCallSite(CallSite(II), LVI);
++        Changed = processCallSite(CallSite(II), LVI);
+         break;
+       case Instruction::SRem:
+-        BBChanged |= processSRem(cast<BinaryOperator>(II), LVI);
++        Changed = processSRem(cast<BinaryOperator>(II), LVI);
+         break;
+       case Instruction::SDiv:
+-        BBChanged |= processSDiv(cast<BinaryOperator>(II), LVI);
++        Changed = processSDiv(cast<BinaryOperator>(II), LVI);
+         break;
+       case Instruction::AShr:
+-        BBChanged |= processAShr(cast<BinaryOperator>(II), LVI);
++        Changed = processAShr(cast<BinaryOperator>(II), LVI);
+         break;
+       case Instruction::Add:
+-        BBChanged |= processAdd(cast<BinaryOperator>(II), LVI);
++        Changed = processAdd(cast<BinaryOperator>(II), LVI);
+         break;
+       }
++      if (Changed)
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "CorrelatedValuePropagation", BB->getFirstNonPHI()) << "correlated-value-propagation was applied");
++      BBChanged |= Changed;
++      Changed = false;
+     }
+ 
+     Instruction *Term = BB->getTerminator();
+     switch (Term->getOpcode()) {
+     case Instruction::Switch:
+-      BBChanged |= processSwitch(cast<SwitchInst>(Term), LVI);
++      Changed = processSwitch(cast<SwitchInst>(Term), LVI);
+       break;
+     case Instruction::Ret: {
+       auto *RI = cast<ReturnInst>(Term);
+@@ -547,11 +555,14 @@
+       if (auto *C = getConstantAt(RetVal, RI, LVI)) {
+         ++NumReturns;
+         RI->replaceUsesOfWith(RetVal, C);
+-        BBChanged = true;        
++        Changed = true;        
+       }
+     }
+     }
+ 
++    if (Changed)
++      ORE.emit(OptimizationRemark(DEBUG_TYPE, "CorrelatedValuePropagation", BB->getFirstNonPHI()) << "correlated-value-propagation was applied"); 
++    BBChanged |= Changed;
+     FnChanged |= BBChanged;
+   }
+ 
+Index: lib/Transforms/Scalar/DCE.cpp
+===================================================================
+--- lib/Transforms/Scalar/DCE.cpp	(revision 307265)
++++ lib/Transforms/Scalar/DCE.cpp	(working copy)
+@@ -19,6 +19,7 @@
+ #include "llvm/Transforms/Scalar/DCE.h"
+ #include "llvm/ADT/SetVector.h"
+ #include "llvm/ADT/Statistic.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/TargetLibraryInfo.h"
+ #include "llvm/IR/InstIterator.h"
+ #include "llvm/IR/Instruction.h"
+@@ -47,9 +48,11 @@
+       auto *TLIP = getAnalysisIfAvailable<TargetLibraryInfoWrapperPass>();
+       TargetLibraryInfo *TLI = TLIP ? &TLIP->getTLI() : nullptr;
+       bool Changed = false;
++      OptimizationRemarkEmitter ORE (BB.getParent());
+       for (BasicBlock::iterator DI = BB.begin(); DI != BB.end(); ) {
+         Instruction *Inst = &*DI++;
+         if (isInstructionTriviallyDead(Inst, TLI)) {
++          ORE.emit(OptimizationRemark(DEBUG_TYPE, "DCE", Inst) << "DCE was applied");
+           Inst->eraseFromParent();
+           Changed = true;
+           ++DIEEliminated;
+@@ -72,6 +75,8 @@
+   return new DeadInstElimination();
+ }
+ 
++static OptimizationRemarkEmitter *ORE = nullptr;
++
+ static bool DCEInstruction(Instruction *I,
+                            SmallSetVector<Instruction *, 16> &WorkList,
+                            const TargetLibraryInfo *TLI) {
+@@ -93,6 +98,8 @@
+           WorkList.insert(OpI);
+     }
+ 
++    ORE->emit(OptimizationRemark(DEBUG_TYPE, "DCE", I) << "DCE was applied");
++
+     I->eraseFromParent();
+     ++DCEEliminated;
+     return true;
+@@ -102,6 +109,7 @@
+ 
+ static bool eliminateDeadCode(Function &F, TargetLibraryInfo *TLI) {
+   bool MadeChange = false;
++  ORE = new OptimizationRemarkEmitter (&F);
+   SmallSetVector<Instruction *, 16> WorkList;
+   // Iterate over the original function, only adding insts to the worklist
+   // if they actually need to be revisited. This avoids having to pre-init
+@@ -120,6 +128,9 @@
+     Instruction *I = WorkList.pop_back_val();
+     MadeChange |= DCEInstruction(I, WorkList, TLI);
+   }
++
++  delete (ORE);
++  ORE = nullptr;
+   return MadeChange;
+ }
+ 
+Index: lib/Transforms/Scalar/DeadStoreElimination.cpp
+===================================================================
+--- lib/Transforms/Scalar/DeadStoreElimination.cpp	(revision 307265)
++++ lib/Transforms/Scalar/DeadStoreElimination.cpp	(working copy)
+@@ -25,6 +25,7 @@
+ #include "llvm/Analysis/GlobalsModRef.h"
+ #include "llvm/Analysis/MemoryBuiltins.h"
+ #include "llvm/Analysis/MemoryDependenceAnalysis.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/TargetLibraryInfo.h"
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/IR/Constants.h"
+@@ -73,7 +74,8 @@
+                       DenseMap<Instruction*, size_t> *InstrOrdering,
+                       SmallSetVector<Value *, 16> *ValueSet = nullptr) {
+   SmallVector<Instruction*, 32> NowDeadInsts;
+-
++  OptimizationRemarkEmitter ORE (I->getParent()->getParent());
++  ORE.emit(OptimizationRemark(DEBUG_TYPE, "DSE", I) << "DSE was applied");
+   NowDeadInsts.push_back(I);
+   --NumFastOther;
+ 
+@@ -868,6 +870,8 @@
+     EarlierIntrinsic->setDest(NewDestGEP);
+     EarlierOffset = EarlierOffset + OffsetMoved;
+   }
++  OptimizationRemarkEmitter ORE (EarlierWrite->getParent()->getParent());
++  ORE.emit(OptimizationRemark(DEBUG_TYPE, "DSE", EarlierWrite) << "DSE was applied");
+   return true;
+ }
+ 
+Index: lib/Transforms/Scalar/EarlyCSE.cpp
+===================================================================
+--- lib/Transforms/Scalar/EarlyCSE.cpp	(revision 307265)
++++ lib/Transforms/Scalar/EarlyCSE.cpp	(working copy)
+@@ -22,6 +22,7 @@
+ #include "llvm/Analysis/InstructionSimplify.h"
+ #include "llvm/Analysis/MemorySSA.h"
+ #include "llvm/Analysis/MemorySSAUpdater.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/TargetLibraryInfo.h"
+ #include "llvm/Analysis/TargetTransformInfo.h"
+ #include "llvm/IR/DataLayout.h"
+@@ -574,6 +575,7 @@
+ bool EarlyCSE::processNode(DomTreeNode *Node) {
+   bool Changed = false;
+   BasicBlock *BB = Node->getBlock();
++  OptimizationRemarkEmitter ORE (BB->getParent());
+ 
+   // If this block has a single predecessor, then the predecessor is the parent
+   // of the domtree node and all of the live out memory values are still current
+@@ -606,6 +608,7 @@
+         // Replace all dominated uses with the known value.
+         if (unsigned Count = replaceDominatedUsesWith(
+                 CondInst, TorF, DT, BasicBlockEdge(Pred, BB))) {
++          ORE.emit(OptimizationRemark(DEBUG_TYPE, "EarlyCse", CondInst) << "early-cse was applied");
+           Changed = true;
+           NumCSECVP += Count;
+         }
+@@ -627,6 +630,7 @@
+     // Dead instructions should just be removed.
+     if (isInstructionTriviallyDead(Inst, &TLI)) {
+       DEBUG(dbgs() << "EarlyCSE DCE: " << *Inst << '\n');
++      ORE.emit(OptimizationRemark(DEBUG_TYPE, "EarlyCse", Inst) << "early-cse was applied");
+       removeMSSA(Inst);
+       Inst->eraseFromParent();
+       Changed = true;
+@@ -672,6 +676,7 @@
+             if (isa<ConstantInt>(KnownCond) &&
+                 cast<ConstantInt>(KnownCond)->isOneValue()) {
+               DEBUG(dbgs() << "EarlyCSE removing guard: " << *Inst << '\n');
++              ORE.emit(OptimizationRemark(DEBUG_TYPE, "EarlyCse", Inst) << "early-cse was applied");
+               removeMSSA(Inst);
+               Inst->eraseFromParent();
+               Changed = true;
+@@ -699,10 +704,12 @@
+       DEBUG(dbgs() << "EarlyCSE Simplify: " << *Inst << "  to: " << *V << '\n');
+       bool Killed = false;
+       if (!Inst->use_empty()) {
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "EarlyCse", Inst) << "early-cse was applied");
+         Inst->replaceAllUsesWith(V);
+         Changed = true;
+       }
+       if (isInstructionTriviallyDead(Inst, &TLI)) {
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "EarlyCse", Inst) << "early-cse was applied");
+         removeMSSA(Inst);
+         Inst->eraseFromParent();
+         Changed = true;
+@@ -719,6 +726,7 @@
+       // See if the instruction has an available value.  If so, use it.
+       if (Value *V = AvailableValues.lookup(Inst)) {
+         DEBUG(dbgs() << "EarlyCSE CSE: " << *Inst << "  to: " << *V << '\n');
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "EarlyCse", Inst) << "early-cse was applied");
+         if (auto *I = dyn_cast<Instruction>(V))
+           I->andIRFlags(Inst);
+         Inst->replaceAllUsesWith(V);
+@@ -765,6 +773,7 @@
+         if (Op != nullptr) {
+           DEBUG(dbgs() << "EarlyCSE CSE LOAD: " << *Inst
+                        << "  to: " << *InVal.DefInst << '\n');
++          ORE.emit(OptimizationRemark(DEBUG_TYPE, "EarlyCse", Inst) << "early-cse was applied");
+           if (!Inst->use_empty())
+             Inst->replaceAllUsesWith(Op);
+           removeMSSA(Inst);
+@@ -804,6 +813,7 @@
+                               Inst)) {
+         DEBUG(dbgs() << "EarlyCSE CSE CALL: " << *Inst
+                      << "  to: " << *InVal.first << '\n');
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "EarlyCse", Inst) << "early-cse was applied");
+         if (!Inst->use_empty())
+           Inst->replaceAllUsesWith(InVal.first);
+         removeMSSA(Inst);
+@@ -854,6 +864,7 @@
+                 MSSA) &&
+                "can't have an intervening store if not using MemorySSA!");
+         DEBUG(dbgs() << "EarlyCSE DSE (writeback): " << *Inst << '\n');
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "EarlyCse", Inst) << "early-cse was applied");
+         removeMSSA(Inst);
+         Inst->eraseFromParent();
+         Changed = true;
+@@ -886,6 +897,7 @@
+           if (LastStoreMemInst.isMatchingMemLoc(MemInst)) {
+             DEBUG(dbgs() << "EarlyCSE DEAD STORE: " << *LastStore
+                          << "  due to: " << *Inst << '\n');
++            ORE.emit(OptimizationRemark(DEBUG_TYPE, "EarlyCse", Inst) << "early-cse was applied");
+             removeMSSA(LastStore);
+             LastStore->eraseFromParent();
+             Changed = true;
+Index: lib/Transforms/Scalar/FlattenCFGPass.cpp
+===================================================================
+--- lib/Transforms/Scalar/FlattenCFGPass.cpp	(revision 307265)
++++ lib/Transforms/Scalar/FlattenCFGPass.cpp	(working copy)
+@@ -14,6 +14,7 @@
+ #include "llvm/Analysis/AliasAnalysis.h"
+ #include "llvm/IR/CFG.h"
+ #include "llvm/Pass.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Transforms/Scalar.h"
+ #include "llvm/Transforms/Utils/Local.h"
+ using namespace llvm;
+@@ -73,6 +74,8 @@
+   bool EverChanged = false;
+   // iterativelyFlattenCFG can make some blocks dead.
+   while (iterativelyFlattenCFG(F, AA)) {
++    OptimizationRemarkEmitter ORE (&F);
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "FlattenCfg", &F) << "flattencfg was applied");
+     removeUnreachableBlocks(F);
+     EverChanged = true;
+   }
+Index: lib/Transforms/Scalar/Float2Int.cpp
+===================================================================
+--- lib/Transforms/Scalar/Float2Int.cpp	(revision 307265)
++++ lib/Transforms/Scalar/Float2Int.cpp	(working copy)
+@@ -20,6 +20,7 @@
+ #include "llvm/ADT/SmallVector.h"
+ #include "llvm/Analysis/AliasAnalysis.h"
+ #include "llvm/Analysis/GlobalsModRef.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/IR/Constants.h"
+ #include "llvm/IR/IRBuilder.h"
+ #include "llvm/IR/InstIterator.h"
+@@ -484,9 +485,12 @@
+ }
+ 
+ // Perform dead code elimination on the instructions we just modified.
+-void Float2IntPass::cleanup() {
+-  for (auto &I : reverse(ConvertedInsts))
++void Float2IntPass::cleanup(Function &F) {
++  OptimizationRemarkEmitter ORE (&F);
++  for (auto &I : reverse(ConvertedInsts)) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "FloatToInt", I.first) << "float2int was applied");
+     I.first->eraseFromParent();
++  }
+ }
+ 
+ bool Float2IntPass::runImpl(Function &F) {
+@@ -506,7 +510,7 @@
+ 
+   bool Modified = validateAndTransform();
+   if (Modified)
+-    cleanup();
++    cleanup(F);
+   return Modified;
+ }
+ 
+Index: lib/Transforms/Scalar/GVNHoist.cpp
+===================================================================
+--- lib/Transforms/Scalar/GVNHoist.cpp	(revision 307265)
++++ lib/Transforms/Scalar/GVNHoist.cpp	(working copy)
+@@ -47,6 +47,7 @@
+ #include "llvm/Analysis/GlobalsModRef.h"
+ #include "llvm/Analysis/MemorySSA.h"
+ #include "llvm/Analysis/MemorySSAUpdater.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/Transforms/Scalar.h"
+ #include "llvm/Transforms/Scalar/GVN.h"
+@@ -786,6 +787,11 @@
+ 
+   std::pair<unsigned, unsigned> hoist(HoistingPointList &HPL) {
+     unsigned NI = 0, NL = 0, NS = 0, NC = 0, NR = 0;
++
++    OptimizationRemarkEmitter *ORE = nullptr;
++    if (!HPL.empty())
++      ORE = new OptimizationRemarkEmitter(HPL.front().first->getParent());
++
+     for (const HoistingPointInfo &HP : HPL) {
+       // Find out whether we already have one of the instructions in HoistPt,
+       // in which case we do not have to move it.
+@@ -851,18 +857,27 @@
+         }
+       }
+ 
+-      if (isa<LoadInst>(Repl))
++      if (isa<LoadInst>(Repl)) {
++        ORE->emit(OptimizationRemark(DEBUG_TYPE, "GvnHoist", Repl) << "gvn-hoist was applied");
+         ++NL;
+-      else if (isa<StoreInst>(Repl))
++      }
++      else if (isa<StoreInst>(Repl)) {
++        ORE->emit(OptimizationRemark(DEBUG_TYPE, "GvnHoist", Repl) << "gvn-hoist was applied");
+         ++NS;
+-      else if (isa<CallInst>(Repl))
++      }
++      else if (isa<CallInst>(Repl)) {
++        ORE->emit(OptimizationRemark(DEBUG_TYPE, "GvnHoist", Repl) << "gvn-hoist was applied");
+         ++NC;
+-      else // Scalar
++      }
++      else { // Scalar
++        ORE->emit(OptimizationRemark(DEBUG_TYPE, "GvnHoist", Repl) << "gvn-hoist was applied");
+         ++NI;
++      }
+ 
+       // Remove and rename all other instructions.
+       for (Instruction *I : InstructionsToHoist)
+         if (I != Repl) {
++          ORE->emit(OptimizationRemark(DEBUG_TYPE, "GvnHoist", Repl) << "gvn-hoist was applied");
+           ++NR;
+           if (auto *ReplacementLoad = dyn_cast<LoadInst>(Repl)) {
+             ReplacementLoad->setAlignment(
+@@ -914,6 +929,9 @@
+       }
+     }
+ 
++    delete(ORE);
++    ORE = nullptr;
++
+     NumHoisted += NL + NS + NC + NI;
+     NumRemoved += NR;
+     NumLoadsHoisted += NL;
+Index: lib/Transforms/Scalar/GVNSink.cpp
+===================================================================
+--- lib/Transforms/Scalar/GVNSink.cpp	(revision 307265)
++++ lib/Transforms/Scalar/GVNSink.cpp	(working copy)
+@@ -46,6 +46,7 @@
+ #include "llvm/ADT/StringExtras.h"
+ #include "llvm/Analysis/GlobalsModRef.h"
+ #include "llvm/Analysis/MemorySSA.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/PostDominators.h"
+ #include "llvm/Analysis/TargetTransformInfo.h"
+ #include "llvm/Analysis/ValueTracking.h"
+@@ -779,8 +780,12 @@
+     }
+   }
+ 
+-  for (unsigned I = 0; I < C.NumInstructions; ++I)
++  OptimizationRemarkEmitter ORE (BBEnd->getParent());
++
++  for (unsigned I = 0; I < C.NumInstructions; ++I) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "GvnSink", C.Blocks.front()->getFirstNonPHI()) << "gvn-sink was applied");
+     sinkLastInstruction(C.Blocks, InsertBB);
++  }
+ 
+   return C.NumInstructions;
+ }
+Index: lib/Transforms/Scalar/GuardWidening.cpp
+===================================================================
+--- lib/Transforms/Scalar/GuardWidening.cpp	(revision 307265)
++++ lib/Transforms/Scalar/GuardWidening.cpp	(working copy)
+@@ -43,6 +43,7 @@
+ #include "llvm/ADT/DenseMap.h"
+ #include "llvm/ADT/DepthFirstIterator.h"
+ #include "llvm/Analysis/LoopInfo.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/PostDominators.h"
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/IR/ConstantRange.h"
+@@ -259,10 +260,19 @@
+       Changed |= eliminateGuardViaWidening(II, DFI, GuardsInBlock);
+   }
+ 
++  OptimizationRemarkEmitter *ORE = nullptr;
++  if (!EliminatedGuards.empty())
++    ORE = new OptimizationRemarkEmitter (EliminatedGuards.front()->getParent()->getParent());
++
+   for (auto *II : EliminatedGuards)
+-    if (!WidenedGuards.count(II))
++    if (!WidenedGuards.count(II)) {
++      ORE->emit(OptimizationRemark(DEBUG_TYPE, "GuardWidening", II) << "guard-widening was applied");
+       II->eraseFromParent();
++    }
+ 
++  delete(ORE);
++  ORE = nullptr;
++
+   return Changed;
+ }
+ 
+Index: lib/Transforms/Scalar/JumpThreading.cpp
+===================================================================
+--- lib/Transforms/Scalar/JumpThreading.cpp	(revision 307265)
++++ lib/Transforms/Scalar/JumpThreading.cpp	(working copy)
+@@ -24,6 +24,7 @@
+ #include "llvm/Analysis/InstructionSimplify.h"
+ #include "llvm/Analysis/Loads.h"
+ #include "llvm/Analysis/LoopInfo.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/IR/ConstantRange.h"
+ #include "llvm/IR/DataLayout.h"
+@@ -203,13 +204,17 @@
+   FindLoopHeaders(F);
+ 
+   bool Changed;
++  OptimizationRemarkEmitter ORE(&F);
+   do {
+     Changed = false;
+     for (Function::iterator I = F.begin(), E = F.end(); I != E;) {
+       BasicBlock *BB = &*I;
+       // Thread all of the branches we can over this block.
+-      while (ProcessBlock(BB))
++      while (ProcessBlock(BB)) {
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "JumpThreading", &F)
++                 << "jump-threading was applied");
+         Changed = true;
++      }
+ 
+       ++I;
+ 
+@@ -219,6 +224,8 @@
+           BB != &BB->getParent()->getEntryBlock()) {
+         DEBUG(dbgs() << "  JT: Deleting dead block '" << BB->getName()
+               << "' with terminator: " << *BB->getTerminator() << '\n');
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "JumpThreading", &F)
++                 << "jump-threading was applied");
+         LoopHeaders.erase(BB);
+         LVI->eraseBlock(BB);
+         DeleteDeadBlock(BB);
+@@ -243,8 +250,11 @@
+         // awesome, but it allows us to use AssertingVH to prevent nasty
+         // dangling pointer issues within LazyValueInfo.
+         LVI->eraseBlock(BB);
+-        if (TryToSimplifyUncondBranchFromEmptyBlock(BB))
++        if (TryToSimplifyUncondBranchFromEmptyBlock(BB)) {
++          ORE.emit(OptimizationRemark(DEBUG_TYPE, "JumpThreading", &F)
++                   << "jump-threading was applied");
+           Changed = true;
++        }
+       }
+     }
+     EverChanged |= Changed;
+Index: lib/Transforms/Scalar/LowerAtomic.cpp
+===================================================================
+--- lib/Transforms/Scalar/LowerAtomic.cpp	(revision 307265)
++++ lib/Transforms/Scalar/LowerAtomic.cpp	(working copy)
+@@ -12,6 +12,7 @@
+ //
+ //===----------------------------------------------------------------------===//
+ 
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Transforms/Scalar/LowerAtomic.h"
+ #include "llvm/IR/Function.h"
+ #include "llvm/IR/IRBuilder.h"
+@@ -22,6 +23,8 @@
+ 
+ #define DEBUG_TYPE "loweratomic"
+ 
++static OptimizationRemarkEmitter *ORE = nullptr;
++
+ static bool LowerAtomicCmpXchgInst(AtomicCmpXchgInst *CXI) {
+   IRBuilder<> Builder(CXI);
+   Value *Ptr = CXI->getPointerOperand();
+@@ -36,6 +39,8 @@
+   Res = Builder.CreateInsertValue(UndefValue::get(CXI->getType()), Orig, 0);
+   Res = Builder.CreateInsertValue(Res, Equal, 1);
+ 
++  ORE->emit(OptimizationRemark(DEBUG_TYPE, "LowerAtomic", CXI) << "loweratomic was applied");
++
+   CXI->replaceAllUsesWith(Res);
+   CXI->eraseFromParent();
+   return true;
+@@ -89,6 +94,9 @@
+                                Orig, Val);
+     break;
+   }
++
++  ORE->emit(OptimizationRemark(DEBUG_TYPE, "LowerAtomic", RMWI) << "loweratomic was applied");
++
+   Builder.CreateStore(Res, Ptr);
+   RMWI->replaceAllUsesWith(Orig);
+   RMWI->eraseFromParent();
+@@ -96,6 +104,7 @@
+ }
+ 
+ static bool LowerFenceInst(FenceInst *FI) {
++  ORE->emit(OptimizationRemark(DEBUG_TYPE, "LowerAtomic", FI) << "loweratomic was applied");
+   FI->eraseFromParent();
+   return true;
+ }
+@@ -112,6 +121,7 @@
+ 
+ static bool runOnBasicBlock(BasicBlock &BB) {
+   bool Changed = false;
++  ORE = new OptimizationRemarkEmitter(BB.getParent());
+   for (BasicBlock::iterator DI = BB.begin(), DE = BB.end(); DI != DE;) {
+     Instruction *Inst = &*DI++;
+     if (FenceInst *FI = dyn_cast<FenceInst>(Inst))
+@@ -128,6 +138,10 @@
+         LowerStoreInst(SI);
+     }
+   }
++
++  delete(ORE);
++  ORE = nullptr;
++
+   return Changed;
+ }
+ 
+Index: lib/Transforms/Scalar/LowerExpectIntrinsic.cpp
+===================================================================
+--- lib/Transforms/Scalar/LowerExpectIntrinsic.cpp	(revision 307265)
++++ lib/Transforms/Scalar/LowerExpectIntrinsic.cpp	(working copy)
+@@ -15,6 +15,7 @@
+ #include "llvm/ADT/SmallVector.h"
+ #include "llvm/ADT/Statistic.h"
+ #include "llvm/ADT/iterator_range.h"
++#include <llvm/Analysis/OptimizationDiagnosticInfo.h>
+ #include "llvm/IR/BasicBlock.h"
+ #include "llvm/IR/Constants.h"
+ #include "llvm/IR/Function.h"
+@@ -306,7 +307,7 @@
+ 
+ static bool lowerExpectIntrinsic(Function &F) {
+   bool Changed = false;
+-
++  OptimizationRemarkEmitter ORE(&F);
+   for (BasicBlock &BB : F) {
+     // Create "block_weights" metadata.
+     if (BranchInst *BI = dyn_cast<BranchInst>(BB.getTerminator())) {
+@@ -333,6 +334,7 @@
+ 
+       Function *Fn = CI->getCalledFunction();
+       if (Fn && Fn->getIntrinsicID() == Intrinsic::expect) {
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "LowerExpectIntrinsic", &F) << "lower-expect-intrinsic was applied");
+         // Before erasing the llvm.expect, walk backward to find
+         // phi that define llvm.expect's first arg, and
+         // infer branch probability:
+Index: lib/Transforms/Scalar/LowerGuardIntrinsic.cpp
+===================================================================
+--- lib/Transforms/Scalar/LowerGuardIntrinsic.cpp	(revision 307265)
++++ lib/Transforms/Scalar/LowerGuardIntrinsic.cpp	(working copy)
+@@ -14,6 +14,7 @@
+ //===----------------------------------------------------------------------===//
+ 
+ #include "llvm/Transforms/Scalar/LowerGuardIntrinsic.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/ADT/SmallVector.h"
+ #include "llvm/IR/BasicBlock.h"
+ #include "llvm/IR/Function.h"
+@@ -29,6 +30,8 @@
+ 
+ using namespace llvm;
+ 
++#define DEBUG_TYPE "lower-guard-intrinsic"
++
+ static cl::opt<uint32_t> PredicatePassBranchWeight(
+     "guards-predicate-pass-branch-weight", cl::Hidden, cl::init(1 << 20),
+     cl::desc("The probability of a guard failing is assumed to be the "
+@@ -107,7 +110,9 @@
+       F.getParent(), Intrinsic::experimental_deoptimize, {F.getReturnType()});
+   DeoptIntrinsic->setCallingConv(GuardDecl->getCallingConv());
+ 
++  OptimizationRemarkEmitter ORE (&F);
+   for (auto *CI : ToLower) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "LowerGuardIntrinsic", CI) << "lower-guard-intrinsic was applied");
+     MakeGuardControlFlowExplicit(DeoptIntrinsic, CI);
+     CI->eraseFromParent();
+   }
+Index: lib/Transforms/Scalar/MemCpyOptimizer.cpp
+===================================================================
+--- lib/Transforms/Scalar/MemCpyOptimizer.cpp	(revision 307265)
++++ lib/Transforms/Scalar/MemCpyOptimizer.cpp	(working copy)
+@@ -22,6 +22,7 @@
+ #include "llvm/Analysis/GlobalsModRef.h"
+ #include "llvm/Analysis/MemoryDependenceAnalysis.h"
+ #include "llvm/Analysis/MemoryLocation.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/TargetLibraryInfo.h"
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/IR/Argument.h"
+@@ -597,6 +598,8 @@
+ bool MemCpyOptPass::processStore(StoreInst *SI, BasicBlock::iterator &BBI) {
+   if (!SI->isSimple()) return false;
+ 
++  OptimizationRemarkEmitter ORE(SI->getParent()->getParent());
++
+   // Avoid merging nontemporal stores since the resulting
+   // memcpy/memset would not be able to preserve the nontemporal hint.
+   // In theory we could teach how to propagate the !nontemporal metadata to
+@@ -665,7 +668,7 @@
+ 
+           DEBUG(dbgs() << "Promoting " << *LI << " to " << *SI
+                        << " => " << *M << "\n");
+-
++          ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemCpyOpt", SI) << "memcpyopt was applied");
+           MD->removeInstruction(SI);
+           SI->eraseFromParent();
+           MD->removeInstruction(LI);
+@@ -715,6 +718,7 @@
+             DL.getTypeStoreSize(SI->getOperand(0)->getType()),
+             findCommonAlignment(DL, SI, LI), C);
+         if (changed) {
++          ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemCpyOpt", SI) << "memcpyopt was applied");
+           MD->removeInstruction(SI);
+           SI->eraseFromParent();
+           MD->removeInstruction(LI);
+@@ -737,6 +741,7 @@
+     if (Instruction *I = tryMergingIntoMemset(SI, SI->getPointerOperand(),
+                                               ByteVal)) {
+       BBI = I->getIterator(); // Don't invalidate iterator.
++      ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemCpyOpt", I) << "memcpyopt was applied");
+       return true;
+     }
+ 
+@@ -754,7 +759,7 @@
+                                      Size, Align, SI->isVolatile());
+ 
+       DEBUG(dbgs() << "Promoting " << *SI << " to " << *M << "\n");
+-
++      ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemCpyOpt", SI) << "memcpyopt was applied");
+       MD->removeInstruction(SI);
+       SI->eraseFromParent();
+       NumMemSetInfer++;
+@@ -775,6 +780,8 @@
+     if (Instruction *I = tryMergingIntoMemset(MSI, MSI->getDest(),
+                                               MSI->getValue())) {
+       BBI = I->getIterator(); // Don't invalidate iterator.
++      OptimizationRemarkEmitter ORE(I->getParent()->getParent());
++      ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemCpyOpt", I) << "memcpyopt was applied");
+       return true;
+     }
+   return false;
+@@ -1056,6 +1063,8 @@
+                          Align, M->isVolatile());
+ 
+   // Remove the instruction we're replacing.
++  OptimizationRemarkEmitter ORE(M->getParent()->getParent());
++  ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemCpyOpt", M) << "memcpyopt was applied");
+   MD->removeInstruction(M);
+   M->eraseFromParent();
+   ++NumMemCpyInstr;
+@@ -1172,6 +1181,8 @@
+   // We can only optimize non-volatile memcpy's.
+   if (M->isVolatile()) return false;
+ 
++  OptimizationRemarkEmitter ORE(M->getParent()->getParent());
++
+   // If the source and destination of the memcpy are the same, then zap it.
+   if (M->getSource() == M->getDest()) {
+     MD->removeInstruction(M);
+@@ -1183,6 +1194,7 @@
+   if (GlobalVariable *GV = dyn_cast<GlobalVariable>(M->getSource()))
+     if (GV->isConstant() && GV->hasDefinitiveInitializer())
+       if (Value *ByteVal = isBytewiseValue(GV->getInitializer())) {
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemCpyOpt", M) << "memcpyopt was applied");
+         IRBuilder<> Builder(M);
+         Builder.CreateMemSet(M->getRawDest(), ByteVal, M->getLength(),
+                              M->getAlignment(), false);
+@@ -1198,8 +1210,10 @@
+   // memcpy + smaller memset.  We don't need the memcpy size for this.
+   if (DepInfo.isClobber())
+     if (MemSetInst *MDep = dyn_cast<MemSetInst>(DepInfo.getInst()))
+-      if (processMemSetMemCpyDependence(M, MDep))
++      if (processMemSetMemCpyDependence(M, MDep)) {
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemCpyOpt", M) << "memcpyopt was applied");
+         return true;
++      }
+ 
+   // The optimizations after this point require the memcpy size.
+   ConstantInt *CopySize = dyn_cast<ConstantInt>(M->getLength());
+@@ -1217,6 +1231,7 @@
+       if (performCallSlotOptzn(M, M->getDest(), M->getSource(),
+                                CopySize->getZExtValue(), M->getAlignment(),
+                                C)) {
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemCpyOpt", M) << "memcpyopt was applied");
+         MD->removeInstruction(M);
+         M->eraseFromParent();
+         return true;
+@@ -1245,6 +1260,7 @@
+     }
+ 
+     if (hasUndefContents) {
++      ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemCpyOpt", M) << "memcpyopt was applied");
+       MD->removeInstruction(M);
+       M->eraseFromParent();
+       ++NumMemCpyInstr;
+@@ -1255,6 +1271,7 @@
+   if (SrcDepInfo.isClobber())
+     if (MemSetInst *MDep = dyn_cast<MemSetInst>(SrcDepInfo.getInst()))
+       if (performMemCpyToMemSetOptzn(M, MDep)) {
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemCpyOpt", M) << "memcpyopt was applied");
+         MD->removeInstruction(M);
+         M->eraseFromParent();
+         ++NumCpyToSet;
+@@ -1277,6 +1294,8 @@
+                     MemoryLocation::getForSource(M)))
+     return false;
+ 
++  OptimizationRemarkEmitter ORE(M->getParent()->getParent());
++
+   DEBUG(dbgs() << "MemCpyOptPass: Optimizing memmove -> memcpy: " << *M
+                << "\n");
+ 
+@@ -1289,6 +1308,7 @@
+ 
+   // MemDep may have over conservative information about this instruction, just
+   // conservatively flush it from the cache.
++  ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemCpyOpt", M) << "memcpyopt was applied");
+   MD->removeInstruction(M);
+ 
+   ++NumMoveToCpy;
+@@ -1363,7 +1383,8 @@
+   DEBUG(dbgs() << "MemCpyOptPass: Forwarding memcpy to byval:\n"
+                << "  " << *MDep << "\n"
+                << "  " << *CS.getInstruction() << "\n");
+-
++  OptimizationRemarkEmitter ORE(CS.getParent()->getParent());
++  ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemCpyOpt", CS.getInstruction()) << "memcpyopt was applied");
+   // Otherwise we're good!  Update the byval argument.
+   CS.setArgument(ArgNo, TmpCast);
+   ++NumMemCpyInstr;
+Index: lib/Transforms/Scalar/MergedLoadStoreMotion.cpp
+===================================================================
+--- lib/Transforms/Scalar/MergedLoadStoreMotion.cpp	(revision 307265)
++++ lib/Transforms/Scalar/MergedLoadStoreMotion.cpp	(working copy)
+@@ -82,6 +82,7 @@
+ #include "llvm/Analysis/Loads.h"
+ #include "llvm/Analysis/MemoryBuiltins.h"
+ #include "llvm/Analysis/MemoryDependenceAnalysis.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/IR/Metadata.h"
+ #include "llvm/IR/PatternMatch.h"
+@@ -283,6 +284,8 @@
+     removeInstruction(A0);
+     A1->replaceAllUsesWith(ANew);
+     removeInstruction(A1);
++    OptimizationRemarkEmitter ORE(BB->getParent());
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "MLdStMotion", ANew) << "mldst-motion was applied");
+     return true;
+   }
+   return false;
+Index: lib/Transforms/Scalar/NaryReassociate.cpp
+===================================================================
+--- lib/Transforms/Scalar/NaryReassociate.cpp	(revision 307265)
++++ lib/Transforms/Scalar/NaryReassociate.cpp	(working copy)
+@@ -77,6 +77,7 @@
+ //===----------------------------------------------------------------------===//
+ 
+ #include "llvm/Transforms/Scalar/NaryReassociate.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/IR/Module.h"
+ #include "llvm/IR/PatternMatch.h"
+@@ -198,6 +199,7 @@
+ 
+ bool NaryReassociatePass::doOneIteration(Function &F) {
+   bool Changed = false;
++  OptimizationRemarkEmitter ORE(&F);
+   SeenExprs.clear();
+   // Process the basic blocks in a depth first traversal of the dominator
+   // tree. This order ensures that all bases of a candidate are in Candidates
+@@ -208,6 +210,7 @@
+       if (SE->isSCEVable(I->getType()) && isPotentiallyNaryReassociable(&*I)) {
+         const SCEV *OldSCEV = SE->getSCEV(&*I);
+         if (Instruction *NewI = tryReassociate(&*I)) {
++          ORE.emit(OptimizationRemark(DEBUG_TYPE, "NaryReassociate", &F) << "nary-reassociate was applied");
+           Changed = true;
+           SE->forgetValue(&*I);
+           I->replaceAllUsesWith(NewI);
+Index: lib/Transforms/Scalar/NewGVN.cpp
+===================================================================
+--- lib/Transforms/Scalar/NewGVN.cpp	(revision 307265)
++++ lib/Transforms/Scalar/NewGVN.cpp	(working copy)
+@@ -73,6 +73,7 @@
+ #include "llvm/Analysis/MemoryBuiltins.h"
+ #include "llvm/Analysis/MemoryLocation.h"
+ #include "llvm/Analysis/MemorySSA.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/TargetLibraryInfo.h"
+ #include "llvm/IR/DataLayout.h"
+ #include "llvm/IR/Dominators.h"
+@@ -3414,6 +3415,7 @@
+   ++StartPoint;
+   // Note that we explicitly recalculate BB->rend() on each iteration,
+   // as it may change when we remove the first instruction.
++  OptimizationRemarkEmitter ORE(BB->getParent());
+   for (BasicBlock::reverse_iterator I(StartPoint); I != BB->rend();) {
+     Instruction &Inst = *I++;
+     if (!Inst.use_empty())
+@@ -3421,6 +3423,8 @@
+     if (isa<LandingPadInst>(Inst))
+       continue;
+ 
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "NewGVN", &Inst) << "newgvn was applied");
++
+     Inst.eraseFromParent();
+     ++NumGVNInstrDeleted;
+   }
+@@ -3540,6 +3544,7 @@
+   // with those members, as they don't dominate anything else in our set.
+ 
+   bool AnythingReplaced = false;
++  OptimizationRemarkEmitter ORE(&F);
+ 
+   // Since we are going to walk the domtree anyway, and we can't guarantee the
+   // DFS numbers are updated, we compute some ourselves.
+@@ -3623,6 +3628,7 @@
+                      << "\n");
+         auto *I = cast<Instruction>(Member);
+         assert(Leader != I && "About to accidentally remove our leader");
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "NewGVN", I) << "newgvn was applied");
+         replaceInstruction(I, Leader);
+         AnythingReplaced = true;
+       }
+@@ -3760,7 +3766,7 @@
+             continue;
+           DEBUG(dbgs() << "Found replacement " << *DominatingLeader << " for "
+                        << *U->get() << " in " << *(U->getUser()) << "\n");
+-
++          ORE.emit(OptimizationRemark(DEBUG_TYPE, "NewGVN", cast<Instruction>(U->getUser())) << "newgvn was applied");
+           // If we replaced something in an instruction, handle the patching of
+           // metadata.  Skip this if we are replacing predicateinfo with its
+           // original operand, as we already know we can just drop it.
+Index: lib/Transforms/Scalar/PartiallyInlineLibCalls.cpp
+===================================================================
+--- lib/Transforms/Scalar/PartiallyInlineLibCalls.cpp	(revision 307265)
++++ lib/Transforms/Scalar/PartiallyInlineLibCalls.cpp	(working copy)
+@@ -14,6 +14,7 @@
+ //===----------------------------------------------------------------------===//
+ 
+ #include "llvm/Transforms/Scalar/PartiallyInlineLibCalls.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/TargetLibraryInfo.h"
+ #include "llvm/Analysis/TargetTransformInfo.h"
+ #include "llvm/IR/IRBuilder.h"
+@@ -83,6 +84,7 @@
+ static bool runPartiallyInlineLibCalls(Function &F, TargetLibraryInfo *TLI,
+                                        const TargetTransformInfo *TTI) {
+   bool Changed = false;
++  OptimizationRemarkEmitter ORE(&F);
+ 
+   Function::iterator CurrBB;
+   for (Function::iterator BB = F.begin(), BE = F.end(); BB != BE;) {
+@@ -114,6 +116,8 @@
+         continue;
+       }
+ 
++      ORE.emit(OptimizationRemark(DEBUG_TYPE, "PartiallyInlineLibcalls", &F) << "partially-inline-libcalls was applied");
++
+       Changed = true;
+       break;
+     }
+Index: lib/Transforms/Scalar/Reassociate.cpp
+===================================================================
+--- lib/Transforms/Scalar/Reassociate.cpp	(revision 307265)
++++ lib/Transforms/Scalar/Reassociate.cpp	(working copy)
+@@ -27,6 +27,7 @@
+ #include "llvm/ADT/SetVector.h"
+ #include "llvm/ADT/Statistic.h"
+ #include "llvm/Analysis/GlobalsModRef.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/IR/CFG.h"
+ #include "llvm/IR/Constants.h"
+@@ -1861,10 +1862,12 @@
+ void ReassociatePass::RecursivelyEraseDeadInsts(
+     Instruction *I, SetVector<AssertingVH<Instruction>> &Insts) {
+   assert(isInstructionTriviallyDead(I) && "Trivially dead instructions only!");
++  OptimizationRemarkEmitter ORE(I->getParent()->getParent());
+   SmallVector<Value *, 4> Ops(I->op_begin(), I->op_end());
+   ValueRankMap.erase(I);
+   Insts.remove(I);
+   RedoInsts.remove(I);
++  ORE.emit(OptimizationRemark(DEBUG_TYPE, "Reassociate", I) << "reassociate was applied");
+   I->eraseFromParent();
+   for (auto Op : Ops)
+     if (Instruction *OpInst = dyn_cast<Instruction>(Op))
+Index: lib/Transforms/Scalar/Reg2Mem.cpp
+===================================================================
+--- lib/Transforms/Scalar/Reg2Mem.cpp	(revision 307265)
++++ lib/Transforms/Scalar/Reg2Mem.cpp	(working copy)
+@@ -17,6 +17,7 @@
+ //===----------------------------------------------------------------------===//
+ 
+ #include "llvm/ADT/Statistic.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/IR/BasicBlock.h"
+ #include "llvm/IR/CFG.h"
+ #include "llvm/IR/Function.h"
+@@ -98,10 +99,14 @@
+       }
+     }
+ 
++  OptimizationRemarkEmitter ORE(&F);
++
+   // Demote escaped instructions
+   NumRegsDemoted += WorkList.size();
+-  for (Instruction *ilb : WorkList)
++  for (Instruction *ilb : WorkList) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "RegToMem", ilb) << "reg2mem was applied");
+     DemoteRegToStack(*ilb, false, AllocaInsertionPoint);
++  }
+ 
+   WorkList.clear();
+ 
+Index: lib/Transforms/Scalar/SCCP.cpp
+===================================================================
+--- lib/Transforms/Scalar/SCCP.cpp	(revision 307265)
++++ lib/Transforms/Scalar/SCCP.cpp	(working copy)
+@@ -26,6 +26,7 @@
+ #include "llvm/ADT/Statistic.h"
+ #include "llvm/Analysis/ConstantFolding.h"
+ #include "llvm/Analysis/GlobalsModRef.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/TargetLibraryInfo.h"
+ #include "llvm/IR/CallSite.h"
+ #include "llvm/IR/Constants.h"
+@@ -1610,7 +1611,9 @@
+   }
+ 
+   bool MadeChanges = false;
++  OptimizationRemarkEmitter ORE(&F);
+ 
++
+   // If we decided that there are basic blocks that are dead in this function,
+   // delete their contents now.  Note that we cannot actually delete the blocks,
+   // as we cannot modify the CFG of the function.
+@@ -1622,6 +1625,8 @@
+       ++NumDeadBlocks;
+       NumInstRemoved += removeAllNonTerminatorAndEHPadInstructions(&BB);
+ 
++      ORE.emit(OptimizationRemark(DEBUG_TYPE, "SCCP", DebugLoc(), &BB) << "sccp was applied");
++
+       MadeChanges = true;
+       continue;
+     }
+@@ -1635,6 +1640,7 @@
+         continue;
+ 
+       if (tryToReplaceWithConstant(Solver, Inst)) {
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "SCCP", Inst) << "sccp was applied");
+         if (isInstructionTriviallyDead(Inst))
+           Inst->eraseFromParent();
+         // Hey, we just changed something!
+@@ -1815,6 +1821,8 @@
+     if (F.isDeclaration())
+       continue;
+ 
++    OptimizationRemarkEmitter ORE(&F);
++
+     if (Solver.isBlockExecutable(&F.front()))
+       for (Function::arg_iterator AI = F.arg_begin(), E = F.arg_end(); AI != E;
+            ++AI)
+@@ -1826,6 +1834,7 @@
+         DEBUG(dbgs() << "  BasicBlock Dead:" << *BB);
+ 
+         ++NumDeadBlocks;
++        ORE.emit(OptimizationRemark("ip"DEBUG_TYPE, "IPSCCP", DebugLoc(), &*BB) << "ipsccp was applied");
+         NumInstRemoved +=
+             changeToUnreachable(BB->getFirstNonPHI(), /*UseLLVMTrap=*/false);
+ 
+@@ -1841,6 +1850,7 @@
+         if (Inst->getType()->isVoidTy())
+           continue;
+         if (tryToReplaceWithConstant(Solver, Inst)) {
++          ORE.emit(OptimizationRemark("ip"DEBUG_TYPE, "IPSCCP", Inst) << "ipsccp was applied");
+           if (!isa<CallInst>(Inst) && !isa<TerminatorInst>(Inst))
+             Inst->eraseFromParent();
+           // Hey, we just changed something!
+Index: lib/Transforms/Scalar/SROA.cpp
+===================================================================
+--- lib/Transforms/Scalar/SROA.cpp	(revision 307265)
++++ lib/Transforms/Scalar/SROA.cpp	(working copy)
+@@ -31,6 +31,7 @@
+ #include "llvm/Analysis/AssumptionCache.h"
+ #include "llvm/Analysis/GlobalsModRef.h"
+ #include "llvm/Analysis/Loads.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/PtrUseVisitor.h"
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/IR/Constants.h"
+@@ -3015,9 +3016,13 @@
+     DEBUG(dbgs() << "  Rewriting FCA loads and stores...\n");
+     enqueueUsers(I);
+     bool Changed = false;
++    OptimizationRemarkEmitter ORE(I.getParent()->getParent());
+     while (!Queue.empty()) {
+       U = Queue.pop_back_val();
+-      Changed |= visit(cast<Instruction>(U->getUser()));
++      if (visit(cast<Instruction>(U->getUser()))) {
++        ORE.emit(OptimizationRemark(DEBUG_TYPE, "SROA", &I) << "SROA was applied");
++        Changed = true;
++      }
+     }
+     return Changed;
+   }
+@@ -3986,10 +3991,14 @@
+ 
+   unsigned NumPartitions = 0;
+   bool Changed = false;
++  OptimizationRemarkEmitter ORE(AI.getParent()->getParent());
+   const DataLayout &DL = AI.getModule()->getDataLayout();
+ 
+   // First try to pre-split loads and stores.
+-  Changed |= presplitLoadsAndStores(AI, AS);
++  if (presplitLoadsAndStores(AI, AS)) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "SROA", &AI) << "sroa was applied");
++    Changed = true;
++  }
+ 
+   // Now that we have identified any pre-splitting opportunities, mark any
+   // splittable (non-whole-alloca) loads and stores as unsplittable. If we fail
+@@ -4029,6 +4038,7 @@
+   // Rewrite each partition.
+   for (auto &P : AS.partitions()) {
+     if (AllocaInst *NewAI = rewritePartition(AI, AS, P)) {
++      ORE.emit(OptimizationRemark(DEBUG_TYPE, "SROA", &AI) << "sroa was applied");
+       Changed = true;
+       if (NewAI != &AI) {
+         uint64_t SizeOfByte = 8;
+@@ -4108,8 +4118,11 @@
+   DEBUG(dbgs() << "SROA alloca: " << AI << "\n");
+   ++NumAllocasAnalyzed;
+ 
++  OptimizationRemarkEmitter ORE(AI.getParent()->getParent());
++
+   // Special case dead allocas, as they're trivial.
+   if (AI.use_empty()) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "SROA", &AI) << "sroa was applied");
+     AI.eraseFromParent();
+     return true;
+   }
+@@ -4144,9 +4157,11 @@
+ 
+     // And mark it for deletion.
+     DeadInsts.insert(DeadUser);
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "SROA", DeadUser) << "SROA was applied");
+     Changed = true;
+   }
+   for (Use *DeadOp : AS.getDeadOperands()) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "SROA", &AI) << "SROA was applied");
+     clobberUse(*DeadOp);
+     Changed = true;
+   }
+@@ -4216,6 +4231,8 @@
+   NumPromoted += PromotableAllocas.size();
+ 
+   DEBUG(dbgs() << "Promoting allocas with mem2reg...\n");
++  OptimizationRemarkEmitter ORE(&F);
++  ORE.emit(OptimizationRemark(DEBUG_TYPE, "SROA", &F) << "sroa was applied");
+   PromoteMemToReg(PromotableAllocas, *DT, AC);
+   PromotableAllocas.clear();
+   return true;
+Index: lib/Transforms/Scalar/SeparateConstOffsetFromGEP.cpp
+===================================================================
+--- lib/Transforms/Scalar/SeparateConstOffsetFromGEP.cpp	(revision 307265)
++++ lib/Transforms/Scalar/SeparateConstOffsetFromGEP.cpp	(working copy)
+@@ -158,6 +158,7 @@
+ 
+ #include "llvm/Analysis/LoopInfo.h"
+ #include "llvm/Analysis/MemoryBuiltins.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/ScalarEvolution.h"
+ #include "llvm/Analysis/TargetLibraryInfo.h"
+ #include "llvm/Analysis/TargetTransformInfo.h"
+@@ -181,6 +182,8 @@
+ using namespace llvm;
+ using namespace llvm::PatternMatch;
+ 
++#define DEBUG_TYPE "separate-const-offset-from-gep"
++
+ static cl::opt<bool> DisableSeparateConstOffsetFromGEP(
+     "disable-separate-const-offset-from-gep", cl::init(false),
+     cl::desc("Do not separate the constant offset from a GEP instruction"),
+@@ -1075,15 +1078,25 @@
+   LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
+   TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI();
+   bool Changed = false;
++  OptimizationRemarkEmitter ORE(&F);
+   for (BasicBlock &B : F) {
+     for (BasicBlock::iterator I = B.begin(), IE = B.end(); I != IE;)
+-      if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(I++))
+-        Changed |= splitGEP(GEP);
++      if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(I++)) {
++        if (splitGEP(GEP)) {
++          ORE.emit(OptimizationRemark(DEBUG_TYPE, "SeparateConstOffsetFromGep", DebugLoc(), &B)
++                   << "separate-const-offset-from-gep was applied");
++          Changed |= true;
++        }
++      }
+     // No need to split GEP ConstantExprs because all its indices are constant
+     // already.
+   }
+ 
+-  Changed |= reuniteExts(F);
++  if (reuniteExts(F)) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "SeparateConstOffsetFromGep", &F)
++             << "separate-const-offset-from-gep was applied");
++    Changed |= true;
++  }
+ 
+   if (VerifyNoDeadCode)
+     verifyNoDeadCode(F);
+Index: lib/Transforms/Scalar/SimplifyCFGPass.cpp
+===================================================================
+--- lib/Transforms/Scalar/SimplifyCFGPass.cpp	(revision 307265)
++++ lib/Transforms/Scalar/SimplifyCFGPass.cpp	(working copy)
+@@ -27,6 +27,7 @@
+ #include "llvm/Analysis/AssumptionCache.h"
+ #include "llvm/Analysis/CFG.h"
+ #include "llvm/Analysis/GlobalsModRef.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/TargetTransformInfo.h"
+ #include "llvm/IR/Attributes.h"
+ #include "llvm/IR/CFG.h"
+@@ -159,10 +160,24 @@
+ static bool simplifyFunctionCFG(Function &F, const TargetTransformInfo &TTI,
+                                 AssumptionCache *AC, int BonusInstThreshold,
+                                 bool LateSimplifyCFG) {
+-  bool EverChanged = removeUnreachableBlocks(F);
+-  EverChanged |= mergeEmptyReturnBlocks(F);
+-  EverChanged |= iterativelySimplifyCFG(F, TTI, AC, BonusInstThreshold,
+-                                        LateSimplifyCFG);
++  bool EverChanged = false;
++  OptimizationRemarkEmitter ORE(&F);
++  if (removeUnreachableBlocks(F)) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "SimplifyCFG", &F)
++             << "simplifycfg was applied");
++    EverChanged = true;
++  }
++  if (mergeEmptyReturnBlocks(F)) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "SimplifyCFG", &F)
++             << "simplifycfg was applied");
++    EverChanged = true;
++  }
++  if (iterativelySimplifyCFG(F, TTI, AC, BonusInstThreshold,
++                                        LateSimplifyCFG)) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "SimplifyCFG", &F)
++             << "simplifycfg was applied");
++    EverChanged = true;
++  }
+ 
+   // If neither pass changed anything, we're done.
+   if (!EverChanged) return false;
+@@ -172,13 +187,25 @@
+   // iterate between the two optimizations.  We structure the code like this to
+   // avoid rerunning iterativelySimplifyCFG if the second pass of
+   // removeUnreachableBlocks doesn't do anything.
+-  if (!removeUnreachableBlocks(F))
++  if (!removeUnreachableBlocks(F)) {
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "SimplifyCFG", &F)
++             << "simplifycfg was applied");
+     return true;
++  }
+ 
+   do {
+-    EverChanged = iterativelySimplifyCFG(F, TTI, AC, BonusInstThreshold,
+-                                         LateSimplifyCFG);
+-    EverChanged |= removeUnreachableBlocks(F);
++    EverChanged = false;
++    if (iterativelySimplifyCFG(F, TTI, AC, BonusInstThreshold,
++                                         LateSimplifyCFG)) {
++      ORE.emit(OptimizationRemark(DEBUG_TYPE, "SimplifyCFG", &F)
++             << "simplifycfg was applied");
++      EverChanged = true;
++    }
++    if (removeUnreachableBlocks(F)) {
++      ORE.emit(OptimizationRemark(DEBUG_TYPE, "SimplifyCFG", &F)
++             << "simplifycfg was applied");
++      EverChanged = true;
++    }
+   } while (EverChanged);
+ 
+   return true;
+Index: lib/Transforms/Scalar/Sink.cpp
+===================================================================
+--- lib/Transforms/Scalar/Sink.cpp	(revision 307265)
++++ lib/Transforms/Scalar/Sink.cpp	(working copy)
+@@ -16,6 +16,7 @@
+ #include "llvm/ADT/Statistic.h"
+ #include "llvm/Analysis/AliasAnalysis.h"
+ #include "llvm/Analysis/LoopInfo.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/IR/CFG.h"
+ #include "llvm/IR/DataLayout.h"
+@@ -209,6 +210,7 @@
+   if (!DT.isReachableFromEntry(&BB)) return false;
+ 
+   bool MadeChange = false;
++  OptimizationRemarkEmitter ORE(BB.getParent());
+ 
+   // Walk the basic block bottom-up.  Remember if we saw a store.
+   BasicBlock::iterator I = BB.end();
+@@ -228,6 +230,7 @@
+       continue;
+ 
+     if (SinkInstruction(Inst, Stores, DT, LI, AA)) {
++      ORE.emit(OptimizationRemark(DEBUG_TYPE, "Sink", Inst) << "sink was applied");
+       ++NumSunk;
+       MadeChange = true;
+     }
+Index: lib/Transforms/Scalar/SpeculativeExecution.cpp
+===================================================================
+--- lib/Transforms/Scalar/SpeculativeExecution.cpp	(revision 307265)
++++ lib/Transforms/Scalar/SpeculativeExecution.cpp	(working copy)
+@@ -64,6 +64,7 @@
+ #include "llvm/Transforms/Scalar/SpeculativeExecution.h"
+ #include "llvm/ADT/SmallSet.h"
+ #include "llvm/Analysis/GlobalsModRef.h"
++#include <llvm/Analysis/OptimizationDiagnosticInfo.h>
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/IR/Instructions.h"
+ #include "llvm/IR/Module.h"
+@@ -280,6 +281,10 @@
+   if (TotalSpeculationCost == 0)
+     return false; // nothing to hoist
+ 
++  OptimizationRemarkEmitter ORE(FromBlock.getParent());
++  ORE.emit(OptimizationRemark(DEBUG_TYPE, "SpeculativeExecution", DebugLoc(), &FromBlock)
++           << "speculative-execution was applied");
++
+   for (auto I = FromBlock.begin(); I != FromBlock.end();) {
+     // We have to increment I before moving Current as moving Current
+     // changes the list that I is iterating through.
+Index: lib/Transforms/Scalar/StructurizeCFG.cpp
+===================================================================
+--- lib/Transforms/Scalar/StructurizeCFG.cpp	(revision 307265)
++++ lib/Transforms/Scalar/StructurizeCFG.cpp	(working copy)
+@@ -12,6 +12,7 @@
+ #include "llvm/ADT/SCCIterator.h"
+ #include "llvm/Analysis/DivergenceAnalysis.h"
+ #include "llvm/Analysis/LoopInfo.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/RegionInfo.h"
+ #include "llvm/Analysis/RegionIterator.h"
+ #include "llvm/Analysis/RegionPass.h"
+@@ -929,6 +930,9 @@
+   LoopPreds.clear();
+   LoopConds.clear();
+ 
++  OptimizationRemarkEmitter ORE(R->getEntry()->getParent());
++  ORE.emit(OptimizationRemark(DEBUG_TYPE, "StructurizeCFG", DebugLoc(), R->getEntry()) << "structurizeg was applied");
++
+   return true;
+ }
+ 
