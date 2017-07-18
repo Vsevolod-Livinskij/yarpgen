@@ -11,6 +11,18 @@ Index: include/llvm/Transforms/Scalar/Float2Int.h
  
    MapVector<Instruction *, ConstantRange> SeenInsts;
    SmallPtrSet<Instruction *, 8> Roots;
+Index: lib/Transforms/InstCombine/InstructionCombining.cpp
+===================================================================
+--- lib/Transforms/InstCombine/InstructionCombining.cpp	(revision 307265)
++++ lib/Transforms/InstCombine/InstructionCombining.cpp	(working copy)
+@@ -48,6 +48,7 @@
+ #include "llvm/Analysis/InstructionSimplify.h"
+ #include "llvm/Analysis/LoopInfo.h"
+ #include "llvm/Analysis/MemoryBuiltins.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/TargetLibraryInfo.h"
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/IR/CFG.h"
 Index: lib/Transforms/Scalar/ADCE.cpp
 ===================================================================
 --- lib/Transforms/Scalar/ADCE.cpp	(revision 307265)
@@ -1496,6 +1508,44 @@ Index: lib/Transforms/Scalar/SpeculativeExecution.cpp
    for (auto I = FromBlock.begin(); I != FromBlock.end();) {
      // We have to increment I before moving Current as moving Current
      // changes the list that I is iterating through.
+Index: lib/Transforms/Scalar/StraightLineStrengthReduce.cpp
+===================================================================
+--- lib/Transforms/Scalar/StraightLineStrengthReduce.cpp	(revision 307265)
++++ lib/Transforms/Scalar/StraightLineStrengthReduce.cpp	(working copy)
+@@ -56,6 +56,7 @@
+ // - When (i' - i) is constant but i and i' are not, we could still perform
+ //   SLSR.
+ #include "llvm/Analysis/ScalarEvolution.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/Analysis/TargetTransformInfo.h"
+ #include "llvm/Analysis/ValueTracking.h"
+ #include "llvm/IR/DataLayout.h"
+@@ -72,6 +73,8 @@
+ using namespace llvm;
+ using namespace PatternMatch;
+ 
++#define DEBUG_TYPE "slsr"
++
+ namespace {
+ 
+ static const unsigned UnknownAddressSpace = ~0u;
+@@ -686,6 +689,8 @@
+     Candidates.pop_back();
+   }
+ 
++  OptimizationRemarkEmitter ORE(&F);
++
+   // Delete all unlink instructions.
+   for (auto *UnlinkedInst : UnlinkedInstructions) {
+     for (unsigned I = 0, E = UnlinkedInst->getNumOperands(); I != E; ++I) {
+@@ -693,6 +698,7 @@
+       UnlinkedInst->setOperand(I, nullptr);
+       RecursivelyDeleteTriviallyDeadInstructions(Op);
+     }
++    ORE.emit(OptimizationRemark(DEBUG_TYPE, "SLSR", &F) << "slsr was applied");
+     UnlinkedInst->deleteValue();
+   }
+   bool Ret = !UnlinkedInstructions.empty();
 Index: lib/Transforms/Scalar/StructurizeCFG.cpp
 ===================================================================
 --- lib/Transforms/Scalar/StructurizeCFG.cpp	(revision 307265)
@@ -1518,3 +1568,85 @@ Index: lib/Transforms/Scalar/StructurizeCFG.cpp
    return true;
  }
  
+Index: lib/Transforms/Utils/BasicBlockUtils.cpp
+===================================================================
+--- lib/Transforms/Utils/BasicBlockUtils.cpp	(revision 307265)
++++ lib/Transforms/Utils/BasicBlockUtils.cpp	(working copy)
+@@ -17,6 +17,7 @@
+ #include "llvm/Analysis/CFG.h"
+ #include "llvm/Analysis/LoopInfo.h"
+ #include "llvm/Analysis/MemoryDependenceAnalysis.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/IR/Constant.h"
+ #include "llvm/IR/DataLayout.h"
+ #include "llvm/IR/Dominators.h"
+@@ -238,12 +239,15 @@
+ llvm::SplitAllCriticalEdges(Function &F,
+                             const CriticalEdgeSplittingOptions &Options) {
+   unsigned NumBroken = 0;
++  OptimizationRemarkEmitter ORE(&F);
+   for (BasicBlock &BB : F) {
+     TerminatorInst *TI = BB.getTerminator();
+     if (TI->getNumSuccessors() > 1 && !isa<IndirectBrInst>(TI))
+       for (unsigned i = 0, e = TI->getNumSuccessors(); i != e; ++i)
+-        if (SplitCriticalEdge(TI, i, Options))
++        if (SplitCriticalEdge(TI, i, Options)) {
+           ++NumBroken;
++          ORE.emit(OptimizationRemark("split-crit-edge", "SplitCriticalEdge", DebugLoc(), &BB) << "split-crit-edge was applied");
++        }
+   }
+   return NumBroken;
+ }
+Index: lib/Transforms/Utils/Mem2Reg.cpp
+===================================================================
+--- lib/Transforms/Utils/Mem2Reg.cpp	(revision 307265)
++++ lib/Transforms/Utils/Mem2Reg.cpp	(working copy)
+@@ -15,6 +15,7 @@
+ #include "llvm/Transforms/Utils/Mem2Reg.h"
+ #include "llvm/ADT/Statistic.h"
+ #include "llvm/Analysis/AssumptionCache.h"
++#include "llvm/Analysis/OptimizationDiagnosticInfo.h"
+ #include "llvm/IR/Dominators.h"
+ #include "llvm/IR/Function.h"
+ #include "llvm/IR/Instructions.h"
+@@ -33,6 +34,8 @@
+   BasicBlock &BB = F.getEntryBlock(); // Get the entry node for the function
+   bool Changed = false;
+ 
++  OptimizationRemarkEmitter ORE(&F);
++
+   while (1) {
+     Allocas.clear();
+ 
+@@ -40,8 +43,10 @@
+     // the entry node
+     for (BasicBlock::iterator I = BB.begin(), E = --BB.end(); I != E; ++I)
+       if (AllocaInst *AI = dyn_cast<AllocaInst>(I)) // Is it an alloca?
+-        if (isAllocaPromotable(AI))
++        if (isAllocaPromotable(AI)) {
++          ORE.emit(OptimizationRemark(DEBUG_TYPE, "MemToReg", &F) << "mem2reg was applied");
+           Allocas.push_back(AI);
++        }
+ 
+     if (Allocas.empty())
+       break;
+Index: lib/Transforms/Utils/SimplifyInstructions.cpp
+===================================================================
+--- lib/Transforms/Utils/SimplifyInstructions.cpp	(revision 307265)
++++ lib/Transforms/Utils/SimplifyInstructions.cpp	(working copy)
+@@ -58,6 +58,7 @@
+             // Mark all uses for resimplification next time round the loop.
+             for (User *U : I->users())
+               Next->insert(cast<Instruction>(U));
++            ORE->emit(OptimizationRemark(DEBUG_TYPE, "InstSimplify", I) << "instsimplify was applied");
+             I->replaceAllUsesWith(V);
+             ++NumSimplified;
+             Changed = true;
+@@ -69,6 +70,7 @@
+           // When instructions get deleted re-iterate instead.
+           BI = BB->begin();
+           BE = BB->end();
++          ORE->emit(OptimizationRemark(DEBUG_TYPE, "InstSimplify", DebugLoc(), BB) << "instsimplify was applied");
+           Changed = true;
+         }
+       }
