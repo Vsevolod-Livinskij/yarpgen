@@ -1565,7 +1565,7 @@ Use specified folder for testing
                         help="Targets for testing (see test_sets.txt). By default, possible variants are "
                              "clang, ubsan_clang and gcc (ubsan_clang is a clang with sanitizer options).")
     parser.add_argument("-j", dest="num_jobs", default=multiprocessing.cpu_count(), type=int,
-                        help='Maximum number of instances to run in parallel. By defaulti, it is set to'
+                        help='Maximum number of instances to run in parallel. By default, it is set to'
                              ' number of processor in your system')
     parser.add_argument("--config-file", dest="config_file",
                         default=os.path.join(common.yarpgen_home, gen_test_makefile.default_test_sets_file_name),
