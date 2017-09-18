@@ -46,6 +46,9 @@ creduce_n = 0
 
 clang_total_stmt_str = "stmts/expr"
 
+memory_max_rss_string = "Maximum resident set size (kbytes): "
+memory_usage_log_file = "mem_log.txt"
+
 yarpgen_timeout = 60
 compiler_timeout = 1200
 run_timeout = 300
@@ -148,6 +151,15 @@ class StatsParser(object):
 
         common.log_msg(logging.DEBUG, "Finished parsing statement statistics")
         return result
+
+    @staticmethod
+    def parse_memory_usage(inp_file_name):
+        common.log_msg(logging.DEBUG, "Parsing memory usage file: " + inp_file_name)
+        inp_file = common.check_and_open_file(inp_file_name, 'r')
+        for i in inp_file:
+            if memory_max_rss_string in i:
+                return [i.split()[-1]]
+        return None
 
 
 # class representing the test
@@ -802,7 +814,7 @@ class TestRun(object):
     STATUS_ok = 7
     STATUS_miscompare = 8
 
-    def __init__(self, test, stat, target, proc_num=-1, parse_stats=False):
+    def __init__(self, test, stat, target, proc_num=-1, parse_stats=False, collect_mem_use=False):
         self.test = test
         self.stat = stat
         self.target = target
@@ -814,14 +826,20 @@ class TestRun(object):
         self.blame_phase = ""
         self.blame_result = "was not run"
         self.parse_stats = parse_stats
+        self.collect_mem_use = collect_mem_use
 
     # Build test
     def build(self):
         # build
-        build_params_list = ["make", "-f", gen_test_makefile.Test_Makefile_name, self.optset]
+        build_params_list = []
+        if self.collect_mem_use:
+            build_params_list += ("/usr/bin/time -v -o " + memory_usage_log_file).split()
+        build_params_list += ["make", "-f", gen_test_makefile.Test_Makefile_name, self.optset]
         self.build_cmd = " ".join(str(p) for p in build_params_list)
+
         self.build_ret_code, self.build_stdout, self.build_stderr, self.is_build_time_expired, self.build_elapsed_time = \
             common.run_cmd(build_params_list, compiler_timeout, self.proc_num)
+
         # update status and stats
         if self.is_build_time_expired:
             self.stat.update_target_runs(self.optset, compfail_timeout)
@@ -841,6 +859,11 @@ class TestRun(object):
                 stmt_stats = StatsParser.parse_clang_stmt_stats_file(str(self.build_stderr, "utf-8"))
             self.stat.add_stats(opt_stats, self.optset, StatsVault.opt_stats_id)
             self.stat.add_stats(stmt_stats, self.optset, StatsVault.stmt_stats_id)
+
+        # parse memory_usage
+        if self.collect_mem_use and self.status == self.STATUS_not_run:
+            memory_usage = StatsParser.parse_memory_usage(memory_usage_log_file)[0]
+            self.stat.update_target_memory_usage(self.optset, int(memory_usage))
 
         # update file list
         expected_files = [source + ".o" for source in gen_test_makefile.sources.value.split()]
@@ -1027,6 +1050,7 @@ class CmdRun (object):
         self.runfail_timeout = 0
         self.out_dif = 0
         self.duration = datetime.timedelta(0)
+        self.memory_usage = [0, 0] # (Value, count)
 
     def update(self, tag):
         self.total += 1
@@ -1073,6 +1097,15 @@ class CmdRun (object):
 
     def get_name(self):
         return self.name
+
+    def get_memory_usage(self):
+        if self.memory_usage[1] == 0:
+            return None
+        return int(self.memory_usage[0] / self.memory_usage[1])
+
+    def update_memory_usage(self, value):
+        self.memory_usage[0] += value
+        self.memory_usage[1] += 1
 
 
 class StatsVault(object):
@@ -1193,6 +1226,12 @@ class Statistics (object):
     def get_collect_stats_enabled(self):
         return self.collect_stats_enabled
 
+    def update_target_memory_usage(self, target_name, value):
+        self.target_runs[target_name].update_memory_usage(value)
+
+    def get_target_memory_usage(self, target_name):
+        return self.target_runs[target_name].get_memory_usage()
+
 MyManager.register("Statistics", Statistics)
 
 
@@ -1287,6 +1326,9 @@ def form_statistics(stat, targets, prev_len, tasks=None):
         total_runfail += stat.get_target_runs(i.name, runfail)
         verbose_stat_str += "\t" + out_dif + " : " + str(stat.get_target_runs(i.name, out_dif)) + "\n"
         total_out_dif += stat.get_target_runs(i.name, out_dif)
+        aver_mem_use = stat.get_target_memory_usage(i.name)
+        if aver_mem_use is not None:
+            verbose_stat_str += "\t" + "average mem usage: " + str(aver_mem_use) + " kbytes\n"
 
     if stat.seeds_enabled():
         seeds_pass, seeds_fail = stat.get_seeds()
@@ -1453,8 +1495,8 @@ def proccess_seeds(seeds_option_value):
         common.log_msg(logging.INFO, "Note, that in the input seeds list there were "+str(len(seeds)-len(unique_seeds))+" duplicating seeds.", forced_duplication=True)
     return unique_seeds
 
-def prepare_env_and_start_testing(out_dir, timeout, targets, num_jobs, config_file, seeds_option_value, blame, creduce,
-                                  no_tmp_cln, collect_stat):
+def prepare_env_and_start_testing(out_dir, timeout, targets, num_jobs, config_file, seeds_option_value,
+                                  blame, creduce, no_tmp_cln, collect_stat, collect_mem_use):
     gen_test_makefile.check_if_std_defined()
     common.check_dir_and_create(out_dir)
 
@@ -1524,7 +1566,8 @@ def prepare_env_and_start_testing(out_dir, timeout, targets, num_jobs, config_fi
     for num in range(num_jobs):
         task_threads[num] = multiprocessing.Process(target=gen_and_test,
                                                     args=(num, makefile, lock, end_time, task_queue, stat, targets,
-                                                          blame, creduce_makefile, collect_stat.split()))
+                                                          blame, creduce_makefile, collect_stat.split(),
+                                                          collect_mem_use))
         task_threads[num].start()
 
     print_online_statistics_and_cleanup(lock, stat, targets, task_threads, num_jobs, no_tmp_cln)
@@ -1539,7 +1582,8 @@ def prepare_env_and_start_testing(out_dir, timeout, targets, num_jobs, config_fi
     sys.stdout.flush()
 
 
-def gen_and_test(num, makefile, lock, end_time, task_queue, stat, targets, blame, creduce_makefile, stat_targets):
+def gen_and_test(num, makefile, lock, end_time, task_queue, stat, targets, blame,
+                 creduce_makefile, stat_targets, collect_mem_use):
     common.log_msg(logging.DEBUG, "Job #" + str(num))
     os.chdir(process_dir + str(num))
     work_dir = os.getcwd()
@@ -1586,7 +1630,8 @@ def gen_and_test(num, makefile, lock, end_time, task_queue, stat, targets, blame
             target_elapsed_time = 0.0
 
             test_run = TestRun(test=test, stat=stat, target=t, proc_num=num,
-                               parse_stats= True if (t.name in stat_targets) else False)
+                               parse_stats= True if (t.name in stat_targets) else False,
+                               collect_mem_use=collect_mem_use)
             if not test_run.build():
                 test.add_fail_run(test_run)
                 continue
@@ -1700,6 +1745,8 @@ Use specified folder for testing
                         help="Do not run tmp_cleaner.sh script during the run")
     parser.add_argument("--collect-stat", dest="collect_stat", default="", type=str,
                         help="List of testing sets for statistics collection")
+    parser.add_argument("--collect-mem-use", dest="collect_mem_use", default=False, action="store_true",
+                        help="Enable memory usage data collection")
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.verbose else logging.INFO
@@ -1721,4 +1768,4 @@ Use specified folder for testing
     gen_test_makefile.set_standard(args.std_str)
     prepare_env_and_start_testing(os.path.abspath(args.out_dir), args.timeout, args.target, args.num_jobs,
                                   args.config_file, args.seeds_option_value, args.blame, args.creduce,
-                                  args.no_tmp_cleaner, args.collect_stat)
+                                  args.no_tmp_cleaner, args.collect_stat, args.collect_mem_use)
