@@ -65,7 +65,7 @@ const uint32_t MAX_BIT_FIELD_SIZE = 2; //TODO: unused, because it cause differen
 const uint32_t CONST_BUFFER_SIZE = 4;
 
 // This switch totally disables array in generated tests
-const bool DISABLE_ARRAYS = false;
+const bool DISABLE_ARRAYS = true;
 const uint32_t MIN_ARRAY_SIZE = 2;
 const uint32_t MAX_ARRAY_SIZE = 10;
 const uint32_t MIN_ARRAY_TYPES_COUNT = 0;
@@ -108,7 +108,7 @@ GenPolicy::GenPolicy () {
 void GenPolicy::init_from_config () {
     test_func_count = TEST_FUNC_COUNT;
 
-    num_of_allowed_int_types = MAX_ALLOWED_INT_TYPES;
+    num_of_allowed_int_types = (options->ocl_vector_ext_size == 0) ? MAX_ALLOWED_INT_TYPES : 1;
     rand_init_allowed_int_types();
 
     allowed_cv_qual.push_back (Type::CV_Qual::NTHG);
@@ -211,12 +211,24 @@ void GenPolicy::init_from_config () {
     max_cse_count = MAX_CSE_COUNT;
 
     for (int i = UnaryExpr::Op::Plus; i < UnaryExpr::Op::MaxOp; ++i) {
+        if (options->ocl_vector_ext_size !=0 && i == UnaryExpr::Op::LogNot)
+            continue;
         Probability<UnaryExpr::Op> prob ((UnaryExpr::Op) i, 10);
         allowed_unary_op.push_back (prob);
     }
     rand_val_gen->shuffle_prob(allowed_unary_op);
 
     for (int i = 0; i < BinaryExpr::Op::MaxOp; ++i) {
+        if (options->ocl_vector_ext_size !=0 &&
+            (i == BinaryExpr::Op::Eq ||
+             i == BinaryExpr::Op::Ne ||
+             i == BinaryExpr::Op::Lt ||
+             i == BinaryExpr::Op::Gt ||
+             i == BinaryExpr::Op::Le ||
+             i == BinaryExpr::Op::Ge ||
+             i == BinaryExpr::Op::LogAnd ||
+             i == BinaryExpr::Op::LogOr))
+            continue;
         Probability<BinaryExpr::Op> prob ((BinaryExpr::Op) i, 10);
         allowed_binary_op.push_back (prob);
     }
@@ -226,8 +238,10 @@ void GenPolicy::init_from_config () {
     stmt_gen_prob.push_back (decl_gen);
     Probability<Node::NodeID> assign_gen (Node::NodeID::EXPR, 10);
     stmt_gen_prob.push_back (assign_gen);
-    Probability<Node::NodeID> if_gen (Node::NodeID::IF, 10);
-    stmt_gen_prob.push_back (if_gen);
+    if (options->ocl_vector_ext_size == 0) {
+        Probability<Node::NodeID> if_gen (Node::NodeID::IF, 10);
+        stmt_gen_prob.push_back (if_gen);
+    }
     rand_val_gen->shuffle_prob(stmt_gen_prob);
 
     Probability<ArithLeafID> data_leaf (ArithLeafID::Data, 11);
@@ -236,8 +250,10 @@ void GenPolicy::init_from_config () {
     arith_leaves.push_back (unary_leaf);
     Probability<ArithLeafID> binary_leaf (ArithLeafID::Binary, 46);
     arith_leaves.push_back (binary_leaf);
-    Probability<ArithLeafID> cond_leaf (ArithLeafID::Conditional, 3);
-    arith_leaves.push_back (cond_leaf);
+    if (options->ocl_vector_ext_size == 0) {
+        Probability<ArithLeafID> cond_leaf(ArithLeafID::Conditional, 3);
+        arith_leaves.push_back(cond_leaf);
+    }
     Probability<ArithLeafID> type_cast_leaf (ArithLeafID::TypeCast, 11);
     arith_leaves.push_back (type_cast_leaf);
     Probability<ArithLeafID> cse_leaf (ArithLeafID::CSE, 8);
@@ -270,8 +286,10 @@ void GenPolicy::init_from_config () {
     allowed_arith_ssp_similar_op.push_back(additive);
     Probability<ArithSSP::SimilarOp> bitwise (ArithSSP::SimilarOp::BITWISE, 5);
     allowed_arith_ssp_similar_op.push_back(bitwise);
-    Probability<ArithSSP::SimilarOp> logic (ArithSSP::SimilarOp::LOGIC, 5);
-    allowed_arith_ssp_similar_op.push_back(logic);
+    if (options->ocl_vector_ext_size == 0) {
+        Probability<ArithSSP::SimilarOp> logic(ArithSSP::SimilarOp::LOGIC, 5);
+        allowed_arith_ssp_similar_op.push_back(logic);
+    }
     Probability<ArithSSP::SimilarOp> mul (ArithSSP::SimilarOp::MUL, 5);
     allowed_arith_ssp_similar_op.push_back(mul);
     Probability<ArithSSP::SimilarOp> bit_sh (ArithSSP::SimilarOp::BIT_SH, 5);
@@ -318,6 +336,12 @@ void GenPolicy::init_from_config () {
     max_if_depth = MAX_IF_DEPTH;
 
     max_test_complexity = MAX_TEST_COMPLEXITY;
+
+    vec_ext_size_prob.emplace_back(Probability<uint32_t>(2, 10));
+    vec_ext_size_prob.emplace_back(Probability<uint32_t>(3, 10));
+    vec_ext_size_prob.emplace_back(Probability<uint32_t>(4, 10));
+    vec_ext_size_prob.emplace_back(Probability<uint32_t>(8, 10));
+    vec_ext_size_prob.emplace_back(Probability<uint32_t>(16, 10));
 
     default_was_loaded = true;
 }
@@ -412,8 +436,10 @@ void GenPolicy::rand_init_allowed_int_types () {
     std::vector<IntegerType::IntegerTypeID> tmp_allowed_int_types;
     uint32_t gen_types = 0;
     while (gen_types < num_of_allowed_int_types) {
-        auto type = (IntegerType::IntegerTypeID) rand_val_gen->get_rand_value(0, IntegerType::IntegerTypeID::MAX_INT_ID - 1);
-        if (type == IntegerType::IntegerTypeID::BOOL && options->is_c())
+        auto type = (IntegerType::IntegerTypeID) rand_val_gen->get_rand_value(0, IntegerType::MAX_INT_ID - 1);
+        if ((options->is_c() && type == IntegerType::IntegerTypeID::BOOL) ||
+            (options->ocl_vector_ext_size != 0 &&
+                    (type < IntegerType::IntegerTypeID::INT || type > IntegerType::IntegerTypeID::ULINT)))
             continue;
         if (std::find(tmp_allowed_int_types.begin(), tmp_allowed_int_types.end(), type) == tmp_allowed_int_types.end()) {
             tmp_allowed_int_types.push_back (type);

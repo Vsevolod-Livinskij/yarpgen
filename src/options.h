@@ -48,12 +48,15 @@ struct Options {
     bool is_cxx ();
     bool is_opencl ();
 
+    void set_ocl_vector_ext();
+
     StandardID standard_id;
     bool mode_64bit;
 
     bool include_valarray;
     bool include_vector;
     bool include_array;
+    uint32_t ocl_vector_ext_size;
 };
 
 extern Options *options;

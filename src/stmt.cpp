@@ -137,7 +137,8 @@ void DeclStmt::emit (std::ostream& stream, std::string offset) {
             ERROR("init of extern var (DeclStmt)");
         }
         stream << " = ";
-        init->emit(stream);
+        TypeCastExpr init_cast (init, data->get_type(), true);
+        init_cast.emit(stream);
     }
     if (data->get_class_id() == Data::VarClassID::ARRAY && !is_extern) {
         //TODO: it is a stub. We should use something to represent list-initialization.

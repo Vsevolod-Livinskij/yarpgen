@@ -16,6 +16,7 @@ limitations under the License.
 
 //////////////////////////////////////////////////////////////////////////////
 
+#include <sstream>
 #include "program.h"
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -183,6 +184,31 @@ void Program::emit_decl () {
         out_file << "#include <vector>\n\n";
     if (options->include_array)
         out_file << "#include <array>\n\n";
+
+    if (options->ocl_vector_ext_size != 0) {
+        std::string vec_size_str = std::to_string(options->ocl_vector_ext_size);
+        auto typedef_gen = [&out_file, &vec_size_str] (std::string type_name) {
+            out_file << "typedef " << type_name << " ";
+            std::vector<std::string> split_res;
+            std::istringstream iss(type_name);
+            for(std::string s; iss >> s; )
+                split_res.push_back(s);
+            if (split_res.size() > 1)
+                out_file << "u";
+            out_file << split_res.back() << vec_size_str;
+            out_file << " __attribute__((ext_vector_type(" << vec_size_str << ")));\n";
+        };
+        out_file << "\n";
+        typedef_gen("char");
+        typedef_gen("unsigned char");
+        typedef_gen("short");
+        typedef_gen("unsigned short");
+        typedef_gen("int");
+        typedef_gen("unsigned int");
+        typedef_gen("long");
+        typedef_gen("unsigned long");
+        out_file << "\n";
+    }
 
     for (int i = 0; i < gen_policy.get_test_func_count(); ++i) {
         extern_inp_sym_table.at(i)->emit_variable_extern_decl(out_file);

@@ -126,9 +126,25 @@ void SymbolTable::emit_variable_def (std::ostream& stream, std::string offset) {
     }
 }
 
+void emit_check_str (std::ostream& stream, std::string offset, const std::string &check_str) {
+    const std::string hash_call = "hash(&seed, ";
+    const std::string hash_call_end = ");\n";
+    if (options->ocl_vector_ext_size == 0)
+        stream << hash_call << check_str << hash_call_end;
+    const std::string ocl_access = "abcdef";
+    for (int i = 0; i < options->ocl_vector_ext_size; ++i) {
+        stream << hash_call << check_str << ".s";
+        if (i < 10)
+            stream << i;
+        else
+            stream << ocl_access[i - 10];
+        stream << hash_call_end;
+    }
+}
+
 void SymbolTable::emit_variable_check (std::ostream& stream, std::string offset) {
     for (const auto &i : variable) {
-        stream << offset + "hash(&seed, " + i->get_name() + ");\n";
+         emit_check_str(stream, offset, i->get_name());
     }
 }
 
@@ -216,9 +232,9 @@ void SymbolTable::emit_single_struct_check (std::shared_ptr<MemberExpr> parent_m
             emit_single_struct_check(member_expr, std::static_pointer_cast<Struct>(struct_var->get_member(j)),
                                      stream, offset);
         else {
-            stream << offset + "hash(&seed, ";
-            member_expr->emit(stream);
-            stream << ");\n";
+            std::stringstream ss;
+            member_expr->emit(ss);
+            emit_check_str(stream, offset, ss.str());
         }
     }
 }
@@ -275,7 +291,7 @@ void SymbolTable::emit_array_check (std::ostream& stream, std::string offset) {
             std::shared_ptr<Data> array_elem = i->get_element(j);
             switch (array_elem->get_class_id()) {
                 case Data::VAR:
-                    stream << offset + "hash(&seed, " + array_elem->get_name() + ");\n";
+                    emit_check_str(stream, offset, array_elem->get_name());
                     break;
                 case Data::STRUCT:
                     emit_single_struct_check(nullptr, std::static_pointer_cast<Struct>(array_elem), stream, offset);

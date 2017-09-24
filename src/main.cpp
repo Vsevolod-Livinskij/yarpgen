@@ -69,6 +69,7 @@ void print_usage_and_exit (std::string error_msg = "") {
     std::cout << "\t-s, --seed=<seed>         Predefined seed (it is accepted in form of SSS or VV_SSS)\n";
     std::cout << "\t-m, --bit-mode=<32/64>    Generated test's bit mode\n";
     std::cout << "\t--std=<standard>          Generated test's language standard\n";
+    std::cout << "\t--ocl-vec-ext             Enables OpenCL vector extension\n";
     auto search_for_default_std = [] (const std::pair<std::string, Options::StandardID> &pair) {
         return pair.second == options->standard_id;
     };
@@ -191,6 +192,9 @@ int main (int argc, char* argv[128]) {
         else if (!strcmp(argv[i], "-q")) {
             quiet = true;
         }
+        else if (!strcmp(argv[i], "--ocl-vec-ext")) {
+            options->ocl_vector_ext_size = UINT32_MAX;
+        }
         else if (parse_long_args(i, argv, "--std", standard_action,
                                  "Can't recognize language standard:")) {}
         else if (parse_long_and_short_args(argc, i, argv, "-d", "--out-dir", out_dir_action,
@@ -211,6 +215,11 @@ int main (int argc, char* argv[128]) {
 
     rand_val_gen = std::make_shared<RandValGen>(RandValGen (seed));
     default_gen_policy.init_from_config();
+
+    if (options->ocl_vector_ext_size == UINT32_MAX) {
+        options->ocl_vector_ext_size = rand_val_gen->get_rand_id(default_gen_policy.get_vec_ext_size_prob());
+        options->set_ocl_vector_ext();
+    }
 
 //    self_test();
 

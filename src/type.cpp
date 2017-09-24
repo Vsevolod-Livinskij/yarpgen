@@ -216,6 +216,9 @@ std::shared_ptr<StructType> StructType::generate (std::shared_ptr<Context> ctx,
                     if (search_res == p->get_allowed_int_types().end())
                         bit_field_dis = GenPolicy::BitFieldID::MAX_BIT_FIELD_ID;
                 }
+                if (options->ocl_vector_ext_size != 0)
+                    bit_field_dis = GenPolicy::BitFieldID::MAX_BIT_FIELD_ID;
+
                 if (bit_field_dis == GenPolicy::BitFieldID::UNNAMED) {
                     struct_type->add_shadow_member(BitField::generate(ctx, true));
                     continue;

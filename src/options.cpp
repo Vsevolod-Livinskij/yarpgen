@@ -25,7 +25,8 @@ using namespace yarpgen;
 Options* yarpgen::options;
 
 Options::Options() : standard_id(CXX11), mode_64bit(true),
-                     include_valarray(false), include_vector(false), include_array(false) {
+                     include_valarray(false), include_vector(false), include_array(false),
+                     ocl_vector_ext_size(0) {
     plane_yarpgen_version = yarpgen_version;
     plane_yarpgen_version.erase(std::remove(plane_yarpgen_version.begin(), plane_yarpgen_version.end(), '.'),
                                 plane_yarpgen_version.end());
@@ -59,4 +60,10 @@ bool Options::is_cxx() {
 
 bool Options::is_opencl() {
     return OpenCL_1_0 <= standard_id && standard_id < MAX_OpenCLStandardID;
+}
+
+void Options::set_ocl_vector_ext() {
+    if (ocl_vector_ext_size == 0)
+        return;
+    mode_64bit = true;
 }

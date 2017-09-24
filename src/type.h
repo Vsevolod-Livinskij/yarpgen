@@ -376,6 +376,8 @@ class TypeCHAR : public IntegerType {
     private:
         void init_type () {
             name = "signed char";
+            if (options->ocl_vector_ext_size != 0)
+                name = "char" + std::to_string(options->ocl_vector_ext_size);
             suffix = "";
             min.val.char_val = SCHAR_MIN;
             max.val.char_val = SCHAR_MAX;
@@ -394,6 +396,8 @@ class TypeUCHAR : public IntegerType {
     private:
         void init_type () {
             name = "unsigned char";
+            if (options->ocl_vector_ext_size != 0)
+                name = "uchar" + std::to_string(options->ocl_vector_ext_size);
             suffix = "";
             min.val.uchar_val = 0;
             max.val.uchar_val = UCHAR_MAX;
@@ -412,6 +416,8 @@ class TypeSHRT : public IntegerType {
     private:
         void init_type () {
             name = "short";
+            if (options->ocl_vector_ext_size != 0)
+                name = "short" + std::to_string(options->ocl_vector_ext_size);
             suffix = "";
             min.val.shrt_val = SHRT_MIN;
             max.val.shrt_val = SHRT_MAX;
@@ -430,6 +436,8 @@ class TypeUSHRT : public IntegerType {
     private:
         void init_type () {
             name = "unsigned short";
+            if (options->ocl_vector_ext_size != 0)
+                name = "ushort" + std::to_string(options->ocl_vector_ext_size);
             suffix = "";
             min.val.ushrt_val = 0;
             max.val.ushrt_val = USHRT_MAX;
@@ -448,6 +456,8 @@ class TypeINT : public IntegerType {
     private:
         void init_type () {
             name = "int";
+            if (options->ocl_vector_ext_size != 0)
+                name = "int" + std::to_string(options->ocl_vector_ext_size);
             suffix = "";
             min.val.int_val = INT_MIN;
             max.val.int_val = INT_MAX;
@@ -466,6 +476,8 @@ class TypeUINT : public IntegerType {
     private:
         void init_type () {
             name = "unsigned int";
+            if (options->ocl_vector_ext_size != 0)
+                name = "uint" + std::to_string(options->ocl_vector_ext_size);
             suffix = "U";
             min.val.uint_val = 0;
             max.val.uint_val = UINT_MAX;
@@ -484,6 +496,8 @@ class TypeLINT : public IntegerType {
     private:
         void init_type () {
             name = "long int";
+            if (options->ocl_vector_ext_size != 0)
+                name = "long" + std::to_string(options->ocl_vector_ext_size);
             suffix = "L";
             if (options->mode_64bit) {
                 bit_size = sizeof(long long int) * CHAR_BIT;
@@ -509,6 +523,8 @@ class TypeULINT : public IntegerType {
     private:
         void init_type () {
             name = "unsigned long int";
+            if (options->ocl_vector_ext_size != 0)
+                name = "ulong" + std::to_string(options->ocl_vector_ext_size);
             suffix = "UL";
             if (options->mode_64bit) {
                 bit_size = sizeof (unsigned long long int) * CHAR_BIT;
