@@ -25,7 +25,7 @@ using namespace yarpgen;
 Options* yarpgen::options;
 
 Options::Options() : standard_id(CXX11), mode_64bit(true),
-                     include_valarray(false), include_vector(false), include_array(false) {
+                     include_valarray(false), include_vector(false), include_array(false), num_mode(INT) {
     plane_yarpgen_version = yarpgen_version;
     plane_yarpgen_version.erase(std::remove(plane_yarpgen_version.begin(), plane_yarpgen_version.end(), '.'),
                                 plane_yarpgen_version.end());

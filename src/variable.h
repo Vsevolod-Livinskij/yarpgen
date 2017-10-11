@@ -68,6 +68,7 @@ class Struct : public Data {
 class ScalarVariable : public Data {
     public:
         ScalarVariable (std::string _name, std::shared_ptr<IntegerType> _type);
+        ScalarVariable (std::string _name, std::shared_ptr<FPType> _type);
         //TODO: add check for type id in Type and Value
         void set_init_value (BuiltinType::ScalarTypedVal _init_val) {init_val = cur_val = _init_val; was_changed = false; }
         void set_cur_value (BuiltinType::ScalarTypedVal _val) { cur_val = _val; was_changed = true; }
@@ -80,6 +81,7 @@ class ScalarVariable : public Data {
         void dbg_dump ();
         static std::shared_ptr<ScalarVariable> generate(std::shared_ptr<Context> ctx);
         static std::shared_ptr<ScalarVariable> generate(std::shared_ptr<Context> ctx, std::shared_ptr<IntegerType> int_type);
+        static std::shared_ptr<ScalarVariable> generate(std::shared_ptr<Context> ctx, std::shared_ptr<FPType> fp_type);
 
     private:
         BuiltinType::ScalarTypedVal min;

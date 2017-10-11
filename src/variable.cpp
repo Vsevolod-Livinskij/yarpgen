@@ -28,16 +28,27 @@ void Struct::allocate_members() {
     // TODO: struct member can be not only integer
     for (uint32_t i = 0; i < struct_type->get_member_count(); ++i) {
         std::shared_ptr<StructType::StructMember> cur_member = struct_type->get_member(i);
-        if (cur_member->get_type()->is_int_type()) {
+        if (cur_member->get_type()->is_builtin_type()) {
             if (struct_type->get_member(i)->get_type()->get_is_static()) {
 //                std::cout << struct_type->get_member(i)->get_definition() << std::endl;
 //                std::cout << struct_type->get_member(i)->get_data().get() << std::endl;
                 members.push_back(struct_type->get_member(i)->get_data());
             }
             else {
-                std::shared_ptr<IntegerType> int_mem_type = std::static_pointer_cast<IntegerType> (struct_type->get_member(i)->get_type());
-                ScalarVariable new_mem (struct_type->get_member(i)->get_name(), int_mem_type);
-                members.push_back(std::make_shared<ScalarVariable>(new_mem));
+                std::shared_ptr<ScalarVariable> new_mem;
+                if (cur_member->get_type()->is_int_type()) {
+                    std::shared_ptr<IntegerType> int_mem_type = std::static_pointer_cast<IntegerType>(
+                            struct_type->get_member(i)->get_type());
+                    new_mem = std::make_shared<ScalarVariable>(struct_type->get_member(i)->get_name(), int_mem_type);
+                }
+                else if (cur_member->get_type()->is_fp_type()) {
+                    std::shared_ptr<FPType> fp_mem_type = std::static_pointer_cast<FPType>(
+                            struct_type->get_member(i)->get_type());
+                    new_mem = std::make_shared<ScalarVariable>(struct_type->get_member(i)->get_name(), fp_mem_type);
+                }
+                else
+                    ERROR("unsupported type of struct member (Struct)");
+                members.push_back(new_mem);
             }
         }
         else if (cur_member->get_type()->is_struct_type()) {
@@ -95,9 +106,22 @@ void Struct::generate_members_init(std::shared_ptr<Context> ctx) {
         if (get_member(i)->get_type()->is_struct_type()) {
             std::static_pointer_cast<Struct>(get_member(i))->generate_members_init(ctx);
         }
-        else if (get_member(i)->get_type()->is_int_type()) {
-            std::shared_ptr<IntegerType> member_type = std::static_pointer_cast<IntegerType>(get_member(i)->get_type());
-            BuiltinType::ScalarTypedVal init_val = BuiltinType::ScalarTypedVal::generate(ctx, member_type->get_min(), member_type->get_max());
+        else if (get_member(i)->get_type()->is_builtin_type()) {
+            BuiltinType::ScalarTypedVal init_val (IntegerType::IntegerTypeID::MAX_INT_ID);
+            if (get_member(i)->get_type()->is_int_type()) {
+                std::shared_ptr<IntegerType> member_type = std::static_pointer_cast<IntegerType>(get_member(i)->get_type());
+                init_val = BuiltinType::ScalarTypedVal::generate(ctx,
+                                                                 member_type->get_min(),
+                                                                 member_type->get_max());
+            }
+            else if (get_member(i)->get_type()->is_fp_type()) {
+                std::shared_ptr<FPType> member_type = std::static_pointer_cast<FPType>(get_member(i)->get_type());
+                init_val = BuiltinType::ScalarTypedVal::generate(ctx,
+                                                                 member_type->get_min(),
+                                                                 member_type->get_max());
+            }
+            else
+                ERROR("unsupported type of struct member (Struct)");
             std::static_pointer_cast<ScalarVariable>(get_member(i))->set_init_value(init_val);
         }
         else {
@@ -106,9 +130,21 @@ void Struct::generate_members_init(std::shared_ptr<Context> ctx) {
     }
 }
 
-ScalarVariable::ScalarVariable (std::string _name, std::shared_ptr<IntegerType> _type) : Data (_name, _type, Data::VarClassID::VAR),
-                    min(_type->get_int_type_id()), max(_type->get_int_type_id()),
-                    init_val(_type->get_int_type_id()), cur_val(_type->get_int_type_id()) {
+ScalarVariable::ScalarVariable (std::string _name, std::shared_ptr<IntegerType> _type) :
+                                Data (_name, _type, Data::VarClassID::VAR),
+                                min(_type->get_int_type_id()), max(_type->get_int_type_id()),
+                                init_val(_type->get_int_type_id()), cur_val(_type->get_int_type_id()) {
+    min = _type->get_min();
+    max = _type->get_max();
+    init_val = _type->get_min();
+    cur_val = _type->get_min();
+    was_changed = false;
+}
+
+ScalarVariable::ScalarVariable (std::string _name, std::shared_ptr<FPType> _type) :
+                                Data (_name, _type, Data::VarClassID::VAR),
+                                min(_type->get_int_type_id()), max(_type->get_int_type_id()),
+                                init_val(_type->get_int_type_id()), cur_val(_type->get_int_type_id()) {
     min = _type->get_min();
     max = _type->get_max();
     init_val = _type->get_min();
@@ -132,8 +168,16 @@ std::shared_ptr<ScalarVariable> ScalarVariable::generate(std::shared_ptr<Context
     NameHandler& name_handler = NameHandler::get_instance();
     std::shared_ptr<ScalarVariable> ret = std::make_shared<ScalarVariable> (name_handler.get_scalar_var_name(),
                                                                             IntegerType::generate(ctx));
-    std::shared_ptr<IntegerType> int_type = IntegerType::generate(ctx);
-    return ScalarVariable::generate(ctx, int_type);
+    if (options->num_mode == Options::NumMode::INT) {
+        std::shared_ptr<IntegerType> int_type = IntegerType::generate(ctx);
+        return ScalarVariable::generate(ctx, int_type);
+    }
+    else if (options->num_mode == Options::NumMode::FP) {
+        std::shared_ptr<FPType> fp_type = FPType::generate(ctx);
+        return ScalarVariable::generate(ctx, fp_type);
+    }
+    else
+        ERROR("unsupported type");
 }
 
 std::shared_ptr<ScalarVariable> ScalarVariable::generate(std::shared_ptr<Context> ctx,
@@ -141,6 +185,15 @@ std::shared_ptr<ScalarVariable> ScalarVariable::generate(std::shared_ptr<Context
     NameHandler& name_handler = NameHandler::get_instance();
     std::shared_ptr<ScalarVariable> ret = std::make_shared<ScalarVariable> (name_handler.get_scalar_var_name(),
                                                                             int_type);
+    ret->set_init_value(BuiltinType::ScalarTypedVal::generate(ctx, ret->get_type()->get_int_type_id()));
+    return ret;
+}
+
+std::shared_ptr<ScalarVariable> ScalarVariable::generate(std::shared_ptr<Context> ctx,
+                                                         std::shared_ptr<FPType> fp_type) {
+    NameHandler& name_handler = NameHandler::get_instance();
+    std::shared_ptr<ScalarVariable> ret = std::make_shared<ScalarVariable> (name_handler.get_scalar_var_name(),
+                                                                            fp_type);
     ret->set_init_value(BuiltinType::ScalarTypedVal::generate(ctx, ret->get_type()->get_int_type_id()));
     return ret;
 }
@@ -169,13 +222,25 @@ void Array::init_elements (std::shared_ptr<Context> ctx) {
     };
 
     auto var_init = [&new_element, &base_type, &ctx, &pick_name] (int32_t idx) {
-        std::shared_ptr<IntegerType> base_int_type = std::static_pointer_cast<IntegerType>(base_type);
-        if (ctx == nullptr || ctx.use_count() == 0)
-            new_element = std::make_shared<ScalarVariable>(pick_name(idx), base_int_type);
-        else {
-            new_element = ScalarVariable::generate(ctx, base_int_type);
-            new_element->set_name(pick_name(idx));
+        if (base_type->is_int_type()) {
+            std::shared_ptr<IntegerType> base_int_type = std::static_pointer_cast<IntegerType>(base_type);
+            if (ctx == nullptr || ctx.use_count() == 0)
+                new_element = std::make_shared<ScalarVariable>(pick_name(idx), base_int_type);
+            else {
+                new_element = ScalarVariable::generate(ctx, base_int_type);
+                new_element->set_name(pick_name(idx));
+            }
+        } else if (base_type->is_fp_type()) {
+            std::shared_ptr<FPType> base_fp_type = std::static_pointer_cast<FPType>(base_type);
+            if (ctx == nullptr || ctx.use_count() == 0)
+                new_element = std::make_shared<ScalarVariable>(pick_name(idx), base_fp_type);
+            else {
+                new_element = ScalarVariable::generate(ctx, base_fp_type);
+                new_element->set_name(pick_name(idx));
+            }
         }
+        else
+            ERROR("unsupported type");
     };
 
     auto struct_init = [&new_element, &base_type, &ctx, &pick_name] (int32_t idx) {
@@ -189,7 +254,7 @@ void Array::init_elements (std::shared_ptr<Context> ctx) {
     };
 
     for (int i = 0; i < array_type->get_size(); ++i) {
-        if (base_type->is_int_type())
+        if (base_type->is_builtin_type())
             var_init(i);
         else if (base_type->is_struct_type())
             struct_init(i);

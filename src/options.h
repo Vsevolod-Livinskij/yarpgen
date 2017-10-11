@@ -43,6 +43,8 @@ struct Options {
     // This map matches StandardIDs to string literals for them
     static const std::map<std::string, StandardID> str_to_standard;
 
+    enum NumMode { INT, FP };
+
     Options();
     bool is_c ();
     bool is_cxx ();
@@ -54,6 +56,8 @@ struct Options {
     bool include_valarray;
     bool include_vector;
     bool include_array;
+
+    NumMode num_mode;
 };
 
 extern Options *options;
