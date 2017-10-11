@@ -20,6 +20,7 @@ limitations under the License.
 
 #include <iostream>
 #include <climits>
+#include <limits>
 #include <memory>
 #include <vector>
 #include "options.h"
@@ -53,7 +54,7 @@ class Type {
 
         // ID for builtin types (in C terminology they "atomic", in C++ they are "fundamental" types)
         enum BuiltinTypeID {
-            Integer, Max_BuiltinTypeID
+            Integer, FloatingPoint, Max_BuiltinTypeID
         };
 
         enum IntegerTypeID {
@@ -74,6 +75,13 @@ class Type {
             MAX_INT_ID,
         };
 
+        enum FPTypeID {
+            FLOAT,
+            DOUBLE,
+            LONG_DOUBLE,
+            MAX_FP_ID
+        };
+
         Type (TypeID _id) : cv_qual(CV_Qual::NTHG), is_static(false), align(0), id (_id) {}
         Type (TypeID _id, CV_Qual _cv_qual, bool _is_static, uint32_t _align) :
               cv_qual (_cv_qual), is_static (_is_static), align (_align), id (_id) {}
@@ -82,6 +90,7 @@ class Type {
         Type::TypeID get_type_id () { return id; }
         virtual BuiltinTypeID get_builtin_type_id() { return Max_BuiltinTypeID; }
         virtual IntegerTypeID get_int_type_id () { return MAX_INT_ID; }
+        virtual FPTypeID get_fp_type_id () { return MAX_FP_ID; }
         virtual bool get_is_signed() { return false; }
         virtual bool get_is_bit_field() { return false; }
         void set_cv_qual (CV_Qual _cv_qual) { cv_qual = _cv_qual; }
@@ -99,6 +108,7 @@ class Type {
         // Utility functions, which allows quickly determine Type kind
         virtual bool is_builtin_type() { return false; }
         virtual bool is_int_type() { return false; }
+        virtual bool is_fp_type() { return false; }
         virtual bool is_struct_type() { return false; }
         virtual bool is_array_type() { return false; }
 
@@ -205,11 +215,19 @@ class BuiltinType : public Type {
                     unsigned long long int ulint64_val; // for 64-bit mode
                     long long int llint_val;
                     unsigned long long int ullint_val;
+                    float float_val;
+                    double double_val;
+                    long double long_double_val;
                 };
 
-                ScalarTypedVal (BuiltinType::IntegerTypeID _int_type_id) : int_type_id(_int_type_id), res_of_ub(NoUB) { val.ullint_val = 0; }
-                ScalarTypedVal (BuiltinType::IntegerTypeID _int_type_id, UB _res_of_ub) : int_type_id (_int_type_id), res_of_ub(_res_of_ub)  { val.ullint_val = 0; }
+                ScalarTypedVal (BuiltinType::IntegerTypeID _int_type_id);
+                ScalarTypedVal (BuiltinType::IntegerTypeID _int_type_id, UB _res_of_ub);
+                ScalarTypedVal (BuiltinType::FPTypeID _fp_type_id);
+                ScalarTypedVal (BuiltinType::FPTypeID _fp_type_id, UB _res_of_ub);
+                bool is_int_type () const { return int_type_id != IntegerTypeID::MAX_INT_ID; }
                 Type::IntegerTypeID get_int_type_id () const { return int_type_id; }
+                bool is_fp_type () const { return fp_type_id != FPTypeID::MAX_FP_ID; }
+                Type::FPTypeID get_fp_type_id () const { return fp_type_id; }
 
                 // Utility functions for UB
                 UB get_ub () { return res_of_ub; }
@@ -223,6 +241,7 @@ class BuiltinType : public Type {
 
                 // Functions which implements UB detection and semantics of all operators
                 ScalarTypedVal cast_type (Type::IntegerTypeID to_type_id);
+                ScalarTypedVal cast_type (Type::FPTypeID to_type_id);
                 ScalarTypedVal operator++ (int) { return pre_op(true ); } // Postfix, but used also as prefix
                 ScalarTypedVal operator-- (int) { return pre_op(false); }// Postfix, but used also as prefix
                 ScalarTypedVal operator- ();
@@ -250,29 +269,33 @@ class BuiltinType : public Type {
 
                 // Randomly generate ScalarTypedVal
                 static ScalarTypedVal generate (std::shared_ptr<Context> ctx, BuiltinType::IntegerTypeID _int_type_id);
+                static ScalarTypedVal generate (std::shared_ptr<Context> ctx, BuiltinType::FPTypeID _fp_type_id);
                 static ScalarTypedVal generate (std::shared_ptr<Context> ctx, ScalarTypedVal min, ScalarTypedVal max);
 
                 // The value itself
                 Val val;
 
             private:
-                // Common fuction for all pre-increment and post-increment operators
+                // Common function for all pre-increment and post-increment operators
                 ScalarTypedVal pre_op (bool inc);
 
                 BuiltinType::IntegerTypeID int_type_id;
+                BuiltinType::FPTypeID fp_type_id;
                 // If we can use the value or it was obtained from operation with UB
                 UB res_of_ub;
         };
 
-        BuiltinType (BuiltinTypeID _builtin_id) : Type (Type::BUILTIN_TYPE), bit_size (0), suffix(""), builtin_id (_builtin_id) {}
+        BuiltinType (BuiltinTypeID _builtin_id) :
+                    Type (Type::BUILTIN_TYPE), bit_size (0), suffix(""), builtin_id (_builtin_id) {}
         BuiltinType (BuiltinTypeID _builtin_id, CV_Qual _cv_qual, bool _is_static, uint32_t _align) :
-                    Type (Type::BUILTIN_TYPE, _cv_qual, _is_static, _align), bit_size (0), suffix(""), builtin_id (_builtin_id) {}
+                    Type (Type::BUILTIN_TYPE, _cv_qual, _is_static, _align),
+                    bit_size (0), suffix(""), builtin_id (_builtin_id) {}
         bool is_builtin_type() { return true; }
 
         // Getters for BuiltinType properties
         BuiltinTypeID get_builtin_type_id() { return builtin_id; }
         uint32_t get_bit_size () { return bit_size; }
-        std::string get_int_literal_suffix() { return suffix; }
+        std::string get_literal_suffix() { return suffix; }
 
     protected:
         unsigned int bit_size;
@@ -557,6 +580,87 @@ class TypeULLINT : public IntegerType {
             max.val.ullint_val = ULLONG_MAX;
             bit_size = sizeof (unsigned long long int) * CHAR_BIT;
             is_signed = false;
+        }
+};
+
+// Class which serves as common ancestor for all standard floating-points types
+class FPType : public BuiltinType {
+    public:
+        FPType (FPTypeID fp_id) : BuiltinType (BuiltinTypeID::FloatingPoint), min(fp_id), max(fp_id), fp_type_id (fp_id) {}
+        FPType (FPTypeID fp_id, CV_Qual _cv_qual, bool _is_static, uint32_t _align) :
+            BuiltinType (BuiltinTypeID::FloatingPoint, _cv_qual, _is_static, _align),
+            min(fp_id), max(fp_id), fp_type_id (fp_id) {}
+        bool is_fp_type() { return true; }
+
+        // Getters for FPType properties
+        FPTypeID get_fp_type_id () { return fp_type_id; }
+        BuiltinType::ScalarTypedVal get_min () { return min; }
+        BuiltinType::ScalarTypedVal get_max () { return max; }
+
+        // This utility functions take FPTypeID and return shared pointer to corresponding type
+        static std::shared_ptr<FPType> init (BuiltinType::FPTypeID _type_id);
+        static std::shared_ptr<FPType> init (BuiltinType::FPTypeID _type_id, CV_Qual _cv_qual, bool _is_static, uint32_t _align);
+
+        // Randomly generate IntegerType (except bit-fields)
+        static std::shared_ptr<FPType> generate (std::shared_ptr<Context> ctx);
+
+    protected:
+        // Minimum and maximum value, which can fit in type
+        BuiltinType::ScalarTypedVal min;
+        BuiltinType::ScalarTypedVal max;
+
+    private:
+        FPTypeID fp_type_id;
+};
+
+class TypeFLOAT : public FPType {
+    public:
+        TypeFLOAT () : FPType(BuiltinType::FPTypeID::FLOAT) { init_type(); }
+        TypeFLOAT (CV_Qual _cv_qual, bool _is_static, uint32_t _align) :
+            FPType(BuiltinType::FPTypeID::FLOAT, _cv_qual, _is_static, _align) { init_type(); }
+        void dbg_dump ();
+
+    private:
+        void init_type () {
+            name = "float";
+            suffix = "f";
+            min.val.float_val = std::numeric_limits<float>::min();
+            max.val.float_val = std::numeric_limits<float>::max();;
+            bit_size = sizeof (float) * CHAR_BIT;
+        }
+};
+
+class TypeDOUBLE : public FPType {
+    public:
+        TypeDOUBLE () : FPType(BuiltinType::FPTypeID::DOUBLE) { init_type(); }
+        TypeDOUBLE (CV_Qual _cv_qual, bool _is_static, uint32_t _align) :
+            FPType(BuiltinType::FPTypeID::DOUBLE, _cv_qual, _is_static, _align) { init_type(); }
+        void dbg_dump ();
+
+    private:
+        void init_type () {
+            name = "double";
+            suffix = "f";
+            min.val.double_val = std::numeric_limits<double>::min();
+            max.val.double_val = std::numeric_limits<double>::max();;
+            bit_size = sizeof (double) * CHAR_BIT;
+        }
+};
+
+class TypeLONG_DOUBLE : public FPType {
+    public:
+        TypeLONG_DOUBLE () : FPType(BuiltinType::FPTypeID::LONG_DOUBLE) { init_type(); }
+        TypeLONG_DOUBLE (CV_Qual _cv_qual, bool _is_static, uint32_t _align) :
+            FPType(BuiltinType::FPTypeID::LONG_DOUBLE, _cv_qual, _is_static, _align) { init_type(); }
+        void dbg_dump ();
+
+    private:
+        void init_type () {
+            name = "long_double";
+            suffix = "f";
+            min.val.long_double_val = std::numeric_limits<long double>::min();
+            max.val.long_double_val = std::numeric_limits<long double>::max();;
+            bit_size = sizeof (long double) * CHAR_BIT;
         }
 };
 

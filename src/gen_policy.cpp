@@ -111,6 +111,8 @@ void GenPolicy::init_from_config () {
     num_of_allowed_int_types = MAX_ALLOWED_INT_TYPES;
     rand_init_allowed_int_types();
 
+    allowed_fp_types.emplace_back(Probability<FPType::FPTypeID>(FPType::FPTypeID::FLOAT, 30));
+
     allowed_cv_qual.push_back (Type::CV_Qual::NTHG);
 
     allow_static_var = false;

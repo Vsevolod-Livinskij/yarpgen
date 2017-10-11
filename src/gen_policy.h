@@ -64,6 +64,12 @@ class RandValGen {
             return dis(rand_gen);
         }
 
+        template<typename T>
+        T get_rand_fp_value (T from, T to) {
+            std::uniform_real_distribution<T> dis(from, to);
+            return dis(rand_gen);
+        }
+
         // Randomly chooses one of IDs, basing on std::vector<Probability<id>>.
         template<typename T>
         T get_rand_id (std::vector<Probability<T>> vec) {
@@ -256,6 +262,8 @@ class GenPolicy {
         std::vector<Probability<IntegerType::IntegerTypeID>>& get_allowed_int_types () { return allowed_int_types; }
         void add_allowed_int_type (Probability<IntegerType::IntegerTypeID> allowed_int_type) { allowed_int_types.push_back(allowed_int_type); }
 
+        std::vector<Probability<FPType::FPTypeID>>& get_allowed_fp_types () { return allowed_fp_types; }
+
         // cv-qualifiers section - defines available cv-qualifiers (nothing, const, volatile, const volatile)
         // TODO: Add check for options compability? Should allow_volatile + allow_const be equal to allow_const_volatile?
         void set_allow_volatile (bool _allow_volatile) { set_cv_qual(_allow_volatile, Type::CV_Qual::VOLAT); }
@@ -421,6 +429,7 @@ class GenPolicy {
         // Types
         uint32_t num_of_allowed_int_types;
         std::vector<Probability<IntegerType::IntegerTypeID>> allowed_int_types;
+        std::vector<Probability<FPType::FPTypeID>> allowed_fp_types;
 
         // cv-qualifiers
         void set_cv_qual(bool value, Type::CV_Qual cv_qual);
