@@ -139,7 +139,7 @@ class ConstExpr : public Expr {
         static std::vector<BuiltinType::ScalarTypedVal> bit_log_const_buffer;
 
         template <typename T>
-        std::string to_string(T T_val, T min, std::string suffix);
+        std::string int_to_string(T T_val, T min, std::string suffix);
         bool propagate_type () { return true; }
         UB propagate_value () { return NoUB; }
 };

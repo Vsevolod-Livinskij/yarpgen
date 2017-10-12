@@ -134,28 +134,37 @@ TypeCastExpr::TypeCastExpr (std::shared_ptr<Expr> _expr, std::shared_ptr<Type> _
 }
 
 bool TypeCastExpr::propagate_type () {
-    if (to_type->get_int_type_id() == Type::IntegerTypeID::MAX_INT_ID ||
-        expr->get_value()->get_type()->get_int_type_id() == Type::IntegerTypeID::MAX_INT_ID) {
+    if (!to_type->is_builtin_type())
         //TODO: what about overloaded struct types cast?
-        ERROR("can cast only integer types (TypeCastExpr)");
-    }
+        ERROR("can cast only integer or fp types (TypeCastExpr)");
     return true;
 }
 
 UB TypeCastExpr::propagate_value () {
-    if (expr->get_value()->get_class_id() != Data::VarClassID::VAR) {
+    if (expr->get_value()->get_class_id() != Data::VarClassID::VAR)
         //TODO: what about overloaded struct types cast?
-        ERROR("can cast only integer types (TypeCastExpr)");
-    }
+        ERROR("can cast only integer or fp types (TypeCastExpr)");
+
     //TODO: Is it always safe to cast value to ScalarVariable?
-    value = std::make_shared<ScalarVariable>("", std::static_pointer_cast<IntegerType>(to_type));
+    if (to_type->is_int_type())
+        value = std::make_shared<ScalarVariable>("", std::static_pointer_cast<IntegerType>(to_type));
+    else if (to_type->is_fp_type())
+        value = std::make_shared<ScalarVariable>("", std::static_pointer_cast<FPType>(to_type));
+    else
+        ERROR("can cast only integer or fp types (TypeCastExpr)");
     std::static_pointer_cast<ScalarVariable>(value)->set_cur_value(std::static_pointer_cast<ScalarVariable>(expr->get_value())->get_cur_value().cast_type(to_type->get_int_type_id()));
     return NoUB;
 }
 
 std::shared_ptr<TypeCastExpr> TypeCastExpr::generate (std::shared_ptr<Context> ctx, std::shared_ptr<Expr> from) {
     GenPolicy::add_to_complexity(Node::NodeID::TYPE_CAST);
-    std::shared_ptr<IntegerType> to_type = IntegerType::generate(ctx);
+    std::shared_ptr<Type> to_type;
+    if (options->num_mode == Options::NumMode::INT)
+        to_type = IntegerType::generate(ctx);
+    else if (options->num_mode == Options::NumMode::FP)
+        to_type = FPType::generate(ctx);
+    else
+        ERROR("Bad mode");
     return std::make_shared<TypeCastExpr> (from, to_type, false);
 }
 
@@ -189,6 +198,12 @@ static bool can_reroll (std::vector<Probability<T>>& prob_vec, std::initializer_
 std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
     GenPolicy::add_to_complexity(Node::NodeID::CONST);
     auto p = ctx->get_gen_policy();
+
+    // Arithmetic with floating point doesn't require complicated constant generation
+    if (options->num_mode == Options::NumMode::FP) {
+        FPType::FPTypeID fp_type_id = FPType::generate(ctx)->get_fp_type_id();
+        return std::make_shared<ConstExpr>(BuiltinType::ScalarTypedVal::generate(ctx, fp_type_id));
+    }
 
     // Randomly choose if we want to create new constant or somehow reuse the old one
     bool gen_new_const = rand_val_gen->get_rand_id(p->get_new_const_prob());
@@ -269,6 +284,11 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
 }
 
 void ConstExpr::fill_const_buf (std::shared_ptr<Context> ctx) {
+    // Arithmetic with floating point doesn't require complicated constant generation,
+    // so we don't use these buffers
+    if (options->num_mode == Options::NumMode::FP)
+        return;
+
     // Wipe out old information
     arith_const_buffer.clear();
     bit_log_const_buffer.clear();
@@ -321,7 +341,7 @@ void ConstExpr::fill_const_buf (std::shared_ptr<Context> ctx) {
 }
 
 template <typename T>
-std::string ConstExpr::to_string(T T_val, T min, std::string suffix) {
+std::string ConstExpr::int_to_string(T T_val, T min, std::string suffix) {
     if (!std::static_pointer_cast<ScalarVariable>(value)->get_type()->get_is_signed())
         return std::to_string(T_val) + suffix;
     if (T_val != min)
@@ -331,63 +351,88 @@ std::string ConstExpr::to_string(T T_val, T min, std::string suffix) {
 
 void ConstExpr::emit (std::ostream& stream, std::string offset) {
     std::shared_ptr<ScalarVariable> scalar_val = std::static_pointer_cast<ScalarVariable>(value);
-    std::shared_ptr<IntegerType> int_type = std::static_pointer_cast<IntegerType>(scalar_val->get_type());
     std::string suffix = std::static_pointer_cast<BuiltinType>(scalar_val->get_type())->get_literal_suffix();
     auto val = scalar_val->get_cur_value().val;
-    switch (scalar_val->get_type()->get_int_type_id()) {
-        case IntegerType::IntegerTypeID::BOOL:
-            stream << (val.bool_val ? "true" : "false");
-            break;
-        case IntegerType::IntegerTypeID::CHAR:
-            stream << to_string(val.char_val, int_type->get_min().val.char_val, suffix);
-            break;
-        case IntegerType::IntegerTypeID::UCHAR:
-            stream << to_string(val.uchar_val, int_type->get_min().val.uchar_val, suffix);
-            break;
-        case IntegerType::IntegerTypeID::SHRT:
-            stream << to_string(val.shrt_val, int_type->get_min().val.shrt_val, suffix);
-            break;
-        case IntegerType::IntegerTypeID::USHRT:
-            stream << to_string(val.ushrt_val, int_type->get_min().val.ushrt_val, suffix);
-            break;
-        case IntegerType::IntegerTypeID::INT:
-            stream << to_string(val.int_val, int_type->get_min().val.int_val, suffix);
-            break;
-        case IntegerType::IntegerTypeID::UINT:
-            stream << to_string(val.uint_val, int_type->get_min().val.uint_val, suffix);
-            break;
-        case IntegerType::IntegerTypeID::LINT:
-            if (options->mode_64bit)
-                stream << to_string(val.lint64_val, int_type->get_min().val.lint64_val, suffix);
-            else
-                stream << to_string(val.lint32_val, int_type->get_min().val.lint32_val, suffix);
-            break;
-        case IntegerType::IntegerTypeID::ULINT:
-            if (options->mode_64bit)
-                stream << to_string(val.ulint64_val, int_type->get_min().val.ulint64_val, suffix);
-            else
-                stream << to_string(val.ulint32_val, int_type->get_min().val.ulint32_val, suffix);
-            break;
-        case IntegerType::IntegerTypeID::LLINT:
-            stream << to_string(val.llint_val, int_type->get_min().val.llint_val, suffix);
-            break;
-        case IntegerType::IntegerTypeID::ULLINT:
-            stream << to_string(val.ullint_val, int_type->get_min().val.ullint_val, suffix);
-            break;
-        case IntegerType::IntegerTypeID::MAX_INT_ID:
-            ERROR("bad int type id (Constexpr)");
+
+    if (scalar_val->get_type()->is_int_type()) {
+        std::shared_ptr<IntegerType> int_type = std::static_pointer_cast<IntegerType>(scalar_val->get_type());
+        switch (scalar_val->get_type()->get_int_type_id()) {
+            case IntegerType::IntegerTypeID::BOOL:
+                stream << (val.bool_val ? "true" : "false");
+                break;
+            case IntegerType::IntegerTypeID::CHAR:
+                stream << int_to_string(val.char_val, int_type->get_min().val.char_val, suffix);
+                break;
+            case IntegerType::IntegerTypeID::UCHAR:
+                stream << int_to_string(val.uchar_val, int_type->get_min().val.uchar_val, suffix);
+                break;
+            case IntegerType::IntegerTypeID::SHRT:
+                stream << int_to_string(val.shrt_val, int_type->get_min().val.shrt_val, suffix);
+                break;
+            case IntegerType::IntegerTypeID::USHRT:
+                stream << int_to_string(val.ushrt_val, int_type->get_min().val.ushrt_val, suffix);
+                break;
+            case IntegerType::IntegerTypeID::INT:
+                stream << int_to_string(val.int_val, int_type->get_min().val.int_val, suffix);
+                break;
+            case IntegerType::IntegerTypeID::UINT:
+                stream << int_to_string(val.uint_val, int_type->get_min().val.uint_val, suffix);
+                break;
+            case IntegerType::IntegerTypeID::LINT:
+                if (options->mode_64bit)
+                    stream << int_to_string(val.lint64_val, int_type->get_min().val.lint64_val, suffix);
+                else
+                    stream << int_to_string(val.lint32_val, int_type->get_min().val.lint32_val, suffix);
+                break;
+            case IntegerType::IntegerTypeID::ULINT:
+                if (options->mode_64bit)
+                    stream << int_to_string(val.ulint64_val, int_type->get_min().val.ulint64_val, suffix);
+                else
+                    stream << int_to_string(val.ulint32_val, int_type->get_min().val.ulint32_val, suffix);
+                break;
+            case IntegerType::IntegerTypeID::LLINT:
+                stream << int_to_string(val.llint_val, int_type->get_min().val.llint_val, suffix);
+                break;
+            case IntegerType::IntegerTypeID::ULLINT:
+                stream << int_to_string(val.ullint_val, int_type->get_min().val.ullint_val, suffix);
+                break;
+            case IntegerType::IntegerTypeID::MAX_INT_ID:
+                ERROR("bad int type id (Constexpr)");
+        }
     }
+    else if (scalar_val->get_type()->is_fp_type()) {
+        switch (scalar_val->get_type()->get_fp_type_id()) {
+            case FPType::FPTypeID::FLOAT:
+                stream << val.float_val << suffix;
+                break;
+            case FPType::FPTypeID::DOUBLE:
+                stream << val.double_val << suffix;
+                break;
+            case FPType::FPTypeID::LONG_DOUBLE:
+                stream << val.long_double_val << suffix;
+                break;
+            case FPType::FPTypeID::MAX_FP_ID:
+                ERROR("bad fp type id (Constexpr)");
+        }
+    }
+    else
+        ERROR("unsupported type (Constexpr)");
 }
 
 ConstExpr::ConstExpr(BuiltinType::ScalarTypedVal _val) :
-        Expr(Node::NodeID::CONST, std::make_shared<ScalarVariable>("", IntegerType::init(_val.get_int_type_id())), 1) {
+        Expr(Node::NodeID::CONST, nullptr, 1) {
+    if (_val.is_int_type())
+        value = std::make_shared<ScalarVariable>("", IntegerType::init(_val.get_int_type_id()));
+    else if (_val.is_fp_type())
+        value = std::make_shared<ScalarVariable>("", FPType::init(_val.get_fp_type_id()));
     std::static_pointer_cast<ScalarVariable>(value)->set_cur_value(_val);
 }
 
 std::shared_ptr<Expr> ArithExpr::integral_prom (std::shared_ptr<Expr> arg) {
-    if (arg->get_value()->get_class_id() != Data::VarClassID::VAR) {
+    if (arg->get_value()->get_class_id() != Data::VarClassID::VAR)
         ERROR("can perform integral_prom only on ScalarVariable (ArithExpr)");
-    }
+    if (!arg->get_value()->get_type()->is_int_type())
+        ERROR("can perform integral_prom only on integer type (ArithExpr)");
 
     if (!arg->get_value()->get_type()->get_is_bit_field()) {
         //[conv.prom]
@@ -607,7 +652,13 @@ UB UnaryExpr::propagate_value () {
 
     std::shared_ptr<ScalarVariable> scalar_val = std::static_pointer_cast<ScalarVariable>(arg->get_value());
 
-    BuiltinType::ScalarTypedVal new_val (scalar_val->get_type()->get_int_type_id());
+    BuiltinType::ScalarTypedVal new_val (IntegerType::IntegerTypeID::MAX_INT_ID);
+    if (scalar_val->get_type()->is_int_type())
+        new_val = BuiltinType::ScalarTypedVal(scalar_val->get_type()->get_int_type_id());
+    else if (scalar_val->get_type()->is_fp_type())
+        new_val = BuiltinType::ScalarTypedVal(scalar_val->get_type()->get_fp_type_id());
+    else
+        ERROR("unsupported type");
 
     switch (op) {
         case PreInc:
@@ -813,6 +864,34 @@ void BinaryExpr::rebuild (UB ub) {
 }
 
 void BinaryExpr::perform_arith_conv () {
+    if (arg0->get_value()->get_type()->is_fp_type() || arg1->get_value()->get_type()->is_fp_type()) {
+        FPType::FPTypeID arg0_fp_type_id;
+        FPType::FPTypeID arg1_fp_type_id;
+        if (arg0->get_value()->get_type()->get_fp_type_id() == arg1->get_value()->get_type()->get_fp_type_id())
+            return;
+        if (arg0->get_value()->get_type()->is_fp_type() && !arg1->get_value()->get_type()->is_fp_type()) {
+            arg0_fp_type_id = arg0->get_value()->get_type()->get_fp_type_id();
+            arg1 = std::make_shared<TypeCastExpr>(arg1, FPType::init(arg0_fp_type_id), true);
+            return;
+        }
+        if (!arg0->get_value()->get_type()->is_fp_type() && arg1->get_value()->get_type()->is_fp_type()) {
+            arg1_fp_type_id = arg0->get_value()->get_type()->get_fp_type_id();
+            arg0 = std::make_shared<TypeCastExpr>(arg0, FPType::init(arg1_fp_type_id), true);
+            return;
+        }
+        arg0_fp_type_id = arg0->get_value()->get_type()->get_fp_type_id();
+        arg1_fp_type_id = arg0->get_value()->get_type()->get_fp_type_id();
+        std::shared_ptr<Type> cast_to_type = FPType::init(std::max(arg0_fp_type_id, arg1_fp_type_id));
+        if (arg0_fp_type_id > arg1_fp_type_id) {
+            arg1 = std::make_shared<TypeCastExpr>(arg1, cast_to_type, true);
+            return;
+        }
+        if (arg0_fp_type_id < arg1_fp_type_id) {
+            arg0 = std::make_shared<TypeCastExpr>(arg0, cast_to_type, true);
+            return;
+        }
+        ERROR("unreachable code for fp type");
+    }
     // integral promotion should be a part of it, but it was moved to base class
     // 10.5.1
     if (arg0->get_value()->get_type()->get_int_type_id() == arg1->get_value()->get_type()->get_int_type_id())
@@ -922,7 +1001,14 @@ UB BinaryExpr::propagate_value () {
 
     std::shared_ptr<ScalarVariable> scalar_lhs = std::static_pointer_cast<ScalarVariable>(arg0->get_value());
     std::shared_ptr<ScalarVariable> scalar_rhs = std::static_pointer_cast<ScalarVariable>(arg1->get_value());
-    BuiltinType::ScalarTypedVal new_val (scalar_lhs->get_type()->get_int_type_id());
+
+    BuiltinType::ScalarTypedVal new_val (IntegerType::IntegerTypeID::MAX_INT_ID);
+    if (scalar_lhs->get_type()->is_int_type())
+        new_val = BuiltinType::ScalarTypedVal(scalar_lhs->get_type()->get_int_type_id());
+    else if (scalar_lhs->get_type()->is_fp_type())
+        new_val = BuiltinType::ScalarTypedVal(scalar_lhs->get_type()->get_fp_type_id());
+    else
+        ERROR("unsupported type");
 
 
 /*
@@ -999,11 +1085,21 @@ UB BinaryExpr::propagate_value () {
     }
 
     if (!new_val.has_ub()) {
-        value = std::make_shared<ScalarVariable>("", IntegerType::init(new_val.get_int_type_id()));
+        if (new_val.is_int_type())
+            value = std::make_shared<ScalarVariable>("", IntegerType::init(new_val.get_int_type_id()));
+        else if (new_val.is_fp_type())
+            value = std::make_shared<ScalarVariable>("", FPType::init(new_val.get_fp_type_id()));
+        else
+            ERROR("unsupported type");
         std::static_pointer_cast<ScalarVariable>(value)->set_cur_value(new_val);
     }
     else {
-        value = std::make_shared<ScalarVariable>("", IntegerType::init(arg0->get_value()->get_type()->get_int_type_id()));
+        if (new_val.is_int_type())
+            value = std::make_shared<ScalarVariable>("", IntegerType::init(arg0->get_value()->get_type()->get_int_type_id()));
+        else if (new_val.is_fp_type())
+            value = std::make_shared<ScalarVariable>("", FPType::init(arg0->get_value()->get_type()->get_fp_type_id()));
+        else
+            ERROR("unsupported type");
     }
 /*
     std::cout << "After prop:" << std::endl;
@@ -1109,13 +1205,25 @@ UB ConditionalExpr::propagate_value() {
     // All other check are done in BinaryExpr constructor
     std::shared_ptr<ScalarVariable> scalar_lhs = std::static_pointer_cast<ScalarVariable>(arg0->get_value());
     std::shared_ptr<ScalarVariable> scalar_rhs = std::static_pointer_cast<ScalarVariable>(arg1->get_value());
-    BuiltinType::ScalarTypedVal new_val (scalar_lhs->get_type()->get_int_type_id());
+    BuiltinType::ScalarTypedVal new_val (IntegerType::IntegerTypeID::MAX_INT_ID);
+    if (scalar_lhs->get_type()->is_int_type())
+        new_val = BuiltinType::ScalarTypedVal(scalar_lhs->get_type()->get_int_type_id());
+    else if (scalar_lhs->get_type()->is_fp_type())
+        new_val = BuiltinType::ScalarTypedVal(scalar_lhs->get_type()->get_fp_type_id());
+    else
+        ERROR("unsupported type");
 
     bool cond_val = options->is_cxx() ? scalar_cond->get_cur_value().val.bool_val :
                                         (bool) scalar_cond->get_cur_value().val.int_val;
     new_val = cond_val ? scalar_lhs->get_cur_value() : scalar_rhs->get_cur_value();
 
-    value = std::make_shared<ScalarVariable>("", IntegerType::init(new_val.get_int_type_id()));
+    if (new_val.is_int_type())
+        value = std::make_shared<ScalarVariable>("", IntegerType::init(new_val.get_int_type_id()));
+    else if (new_val.is_int_type())
+        value = std::make_shared<ScalarVariable>("", FPType::init(new_val.get_fp_type_id()));
+    else
+        ERROR("unsupported type");
+
     std::static_pointer_cast<ScalarVariable>(value)->set_cur_value(new_val);
 
     return UB::NoUB;
@@ -1199,7 +1307,8 @@ std::shared_ptr<Expr> MemberExpr::set_value (std::shared_ptr<Expr> _expr) {
     }
     switch (value->get_class_id()) {
         case Data::VarClassID::VAR:
-            if (value->get_type()->get_int_type_id() != _new_value->get_type()->get_int_type_id()) {
+            if (value->get_type()->get_int_type_id() != _new_value->get_type()->get_int_type_id() ||
+                value->get_type()->get_fp_type_id() != _new_value->get_type()->get_fp_type_id()) {
                 ERROR("can't assign different types (MemberExpr)");
             }
             if (value->get_type()->get_is_bit_field())

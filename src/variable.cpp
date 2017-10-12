@@ -143,8 +143,8 @@ ScalarVariable::ScalarVariable (std::string _name, std::shared_ptr<IntegerType> 
 
 ScalarVariable::ScalarVariable (std::string _name, std::shared_ptr<FPType> _type) :
                                 Data (_name, _type, Data::VarClassID::VAR),
-                                min(_type->get_int_type_id()), max(_type->get_int_type_id()),
-                                init_val(_type->get_int_type_id()), cur_val(_type->get_int_type_id()) {
+                                min(_type->get_fp_type_id()), max(_type->get_fp_type_id()),
+                                init_val(_type->get_fp_type_id()), cur_val(_type->get_fp_type_id()) {
     min = _type->get_min();
     max = _type->get_max();
     init_val = _type->get_min();
@@ -165,9 +165,6 @@ void ScalarVariable::dbg_dump () {
 }
 
 std::shared_ptr<ScalarVariable> ScalarVariable::generate(std::shared_ptr<Context> ctx) {
-    NameHandler& name_handler = NameHandler::get_instance();
-    std::shared_ptr<ScalarVariable> ret = std::make_shared<ScalarVariable> (name_handler.get_scalar_var_name(),
-                                                                            IntegerType::generate(ctx));
     if (options->num_mode == Options::NumMode::INT) {
         std::shared_ptr<IntegerType> int_type = IntegerType::generate(ctx);
         return ScalarVariable::generate(ctx, int_type);
@@ -194,7 +191,7 @@ std::shared_ptr<ScalarVariable> ScalarVariable::generate(std::shared_ptr<Context
     NameHandler& name_handler = NameHandler::get_instance();
     std::shared_ptr<ScalarVariable> ret = std::make_shared<ScalarVariable> (name_handler.get_scalar_var_name(),
                                                                             fp_type);
-    ret->set_init_value(BuiltinType::ScalarTypedVal::generate(ctx, ret->get_type()->get_int_type_id()));
+    ret->set_init_value(BuiltinType::ScalarTypedVal::generate(ctx, ret->get_type()->get_fp_type_id()));
     return ret;
 }
 
