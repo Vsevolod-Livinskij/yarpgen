@@ -32,6 +32,7 @@ import common
 Test_Makefile_name = "Test_Makefile"
 license_file_name = "LICENSE.txt"
 check_isa_file_name = "check_isa.cpp"
+fp_res_cmp_file_name = "fp_res_compare.cpp"
 default_test_sets_file_name = "test_sets.txt"
 
 default_config_file = "test_sets.txt"
@@ -328,6 +329,18 @@ def detect_native_arch():
             common.run_cmd([sys_compiler, check_isa_file, "-o", check_isa_binary], None)
         if ret_code != 0:
             common.print_and_exit("Can't compile " + check_isa_file + ": " + str(err_output, "utf-8"))
+
+    # And one more file to compile
+    #TODO: it is not the best place
+    fp_res_cmp_file = os.path.abspath(common.yarpgen_home + os.sep + fp_res_cmp_file_name)
+    fp_res_cmp_binary = os.path.abspath(common.yarpgen_home + os.sep + fp_res_cmp_file_name.replace(".cpp", ""))
+    if not common.if_exec_exist(fp_res_cmp_binary):
+        if not os.path.exists(fp_res_cmp_file):
+            common.print_and_exit("Can't find " + fp_res_cmp_file)
+        ret_code, output, err_output, time_expired, elapsed_time = \
+            common.run_cmd([sys_compiler, fp_res_cmp_file, "-o", fp_res_cmp_binary, "-std=c++11"], None)
+        if ret_code != 0:
+            common.print_and_exit("Can't compile " + fp_res_cmp_file + ": " + str(err_output, "utf-8"))
 
     ret_code, output, err_output, time_expired, elapsed_time = common.run_cmd([check_isa_binary], None)
     if ret_code != 0:

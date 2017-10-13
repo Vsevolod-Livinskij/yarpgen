@@ -29,8 +29,8 @@ Compiler specs:
 # Arch prefix - prefix for specifying different architectures (it will be concatenated with Compiler arch value)
 
 # Spec name | C++ executable name | C executable name | Common arguments                                            | Arch prefix
-gcc         | g++                 | gcc               | -w -fpermissive                                             | -march=
-clang       | clang++             | clang             | -w                                                          | -march=
+gcc         | g++                 | gcc               | -w -fpermissive -ffast-math                                 | -march=
+clang       | clang++             | clang             | -w -ffast-math                                                        | -march=
 # Ubsan is clang or gcc with sanitizer options. It is used for generator check.
 # If you want to use sanitizer with -m32, please make sure that you pass "-rtlib=compiler-rt -lgcc_s" options if you are using clang.
 # Otherwise it may fail with "undefined reference to `__mulodi4'" error message.

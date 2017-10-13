@@ -319,6 +319,68 @@ class Test(object):
     # Verify the results and if bad results are found, report / save them.
     def verify_results(self, lock):
         results = {}
+
+        fp_res_cmp_run_list = ["." + os.sep + gen_test_makefile.fp_res_cmp_file_name.replace(".cpp", "")]
+        for t in self.successful_test_runs:
+            assert t.status == TestRun.STATUS_ok
+            fp_res_cmp_run_list.append(t.optset + "_out_res.txt")
+
+        ret_code, stdout, stderr, is_time_expired, elapsed_time = \
+            common.run_cmd(fp_res_cmp_run_list, yarpgen_timeout, 0, yarpgen_mem_limit)
+
+        raw_fp_cmp_res = str(stdout, "utf-8").split("\n")
+        raw_fp_cmp_res_list = []
+        for i in raw_fp_cmp_res:
+            if i != '':
+                raw_fp_cmp_res_list.append(i.split())
+        raw_fp_cmp_res_list.sort(key=len)
+
+        good_runs = []
+        bad_runs = []
+        if len(raw_fp_cmp_res_list) == 1:
+            return
+        elif len(results) == 2:
+            self.status = self.STATUS_miscompare
+            for t in self.successful_test_runs:
+                if t.optset in raw_fp_cmp_res_list[-1]:
+                    good_runs.append(t)
+                else:
+                    bad_runs.append(t)
+             # Majority vote
+            if len(bad_runs) > len(good_runs):
+                good_runs, bad_runs = bad_runs, good_runs
+            # Count number of no_opt optsets in each bin.
+            good_no_opt = 0
+            for run in good_runs:
+                good_no_opt += run.optset.count("no_opt")
+            bad_no_opt = 0
+            for run in bad_runs:
+                bad_no_opt += run.optset.count("no_opt")
+            if good_no_opt == 0 and bad_no_opt > 0:
+                good_runs, bad_runs = bad_runs, good_runs
+            # Assume one compiler is failing at many opt-sets.
+            good_cmplrs = set()
+            bad_cmplrs = set()
+            for run in good_runs:
+                good_cmplrs.add(run.target.specs.name)
+            for run in bad_runs:
+                bad_cmplrs.add(run.target.specs.name)
+            if len(good_cmplrs) < len(bad_cmplrs):
+                good_runs, bad_runs = bad_runs, good_runs
+        else:
+            # More than 2 different results.
+            # Treat them all as bad
+            if len(self.successful_test_runs) == 0:
+                self.status = self.STATUS_no_good_runs
+            else:
+                self.status = self.STATUS_multiple_miscompare
+            good_runs = []
+            bad_runs = []
+            for t in self.successful_test_runs:
+                bad_runs.append(t)
+
+
+        '''
         for t in self.successful_test_runs:
             assert t.status == TestRun.STATUS_ok
             if t.checksum not in results:
@@ -370,6 +432,7 @@ class Test(object):
         # Run blame triagging for one of failing optsets
         if self.blame and good_runs:
             do_blame(self, self.files, good_runs[0].checksum, bad_runs[0].target)
+        '''
 
         # Run creduce for one of failing optsets
         if self.creduce and good_runs:
@@ -1504,6 +1567,10 @@ def prepare_env_and_start_testing(out_dir, timeout, targets, num_jobs, config_fi
         force = True,
         config_file = config_file,
         stat_targets=collect_stat.split())
+    fp_res_cmp_binary_name = gen_test_makefile.fp_res_cmp_file_name.replace(".cpp", "")
+    common.check_and_copy(common.yarpgen_home + os.sep + fp_res_cmp_binary_name,
+                          os.path.join(out_dir, fp_res_cmp_binary_name))
+    fp_res_cmp_binary_name = os.path.join(out_dir, fp_res_cmp_binary_name)
 
     test_sets = dump_testing_sets(targets)
     missed_stat_targets = [x for x in collect_stat.split() if x not in test_sets]
@@ -1544,7 +1611,7 @@ def prepare_env_and_start_testing(out_dir, timeout, targets, num_jobs, config_fi
     task_threads = [0] * num_jobs
     for num in range(num_jobs):
         task_threads[num] = multiprocessing.Process(target=gen_and_test,
-                                                    args=(num, makefile, lock, end_time, task_queue, stat, targets,
+                                                    args=(num, makefile, fp_res_cmp_binary_name, lock, end_time, task_queue, stat, targets,
                                                           blame, creduce_makefile, collect_stat.split()))
         task_threads[num].start()
 
@@ -1560,7 +1627,7 @@ def prepare_env_and_start_testing(out_dir, timeout, targets, num_jobs, config_fi
     sys.stdout.flush()
 
 
-def gen_and_test(num, makefile, lock, end_time, task_queue, stat, targets, blame, creduce_makefile, stat_targets):
+def gen_and_test(num, makefile, fp_res_cmp_bin_name, lock, end_time, task_queue, stat, targets, blame, creduce_makefile, stat_targets):
     common.log_msg(logging.DEBUG, "Job #" + str(num))
     os.chdir(process_dir + str(num))
     work_dir = os.getcwd()
@@ -1588,6 +1655,7 @@ def gen_and_test(num, makefile, lock, end_time, task_queue, stat, targets, blame
             raise
         common.clean_dir(".")
         common.check_and_copy(makefile, work_dir)
+        common.check_and_copy(fp_res_cmp_bin_name, work_dir)
 
         # Generate the test.
         # TODO: maybe, it is better to call generator through Makefile?

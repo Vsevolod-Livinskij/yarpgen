@@ -28,7 +28,7 @@ const uint32_t TEST_FUNC_COUNT = 5;
 
 const uint32_t MAX_ALLOWED_INT_TYPES = 3;
 
-const uint32_t MAX_ARITH_DEPTH = 2;
+const uint32_t MAX_ARITH_DEPTH = 3;
 const uint32_t MAX_TOTAL_EXPR_COUNT = 50000000;
 const uint32_t MAX_FUNC_EXPR_COUNT = 10000000;
 
@@ -49,8 +49,8 @@ const uint32_t MAX_IF_DEPTH = 3;
 
 const uint64_t MAX_TEST_COMPLEXITY = UINT64_MAX;
 
-const uint32_t MAX_ARITH_MUL_COMPLEXITY = 5;
-const uint32_t MAX_ARITH_ADD_COMPLEXITY = 7;
+const uint32_t MAX_ARITH_MUL_COMPLEXITY = 3;
+const uint32_t MAX_ARITH_ADD_COMPLEXITY = 5;
 
 const uint32_t MIN_STRUCT_TYPES_COUNT = 0;
 const uint32_t MAX_STRUCT_TYPES_COUNT = 6;

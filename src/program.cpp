@@ -17,6 +17,7 @@ limitations under the License.
 //////////////////////////////////////////////////////////////////////////////
 
 #include "program.h"
+#include "util.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -231,12 +232,15 @@ void Program::emit_main () {
     // Headers
     //////////////////////////////////////////////////////////
     out_file << "#include <stdio.h>\n";
+    out_file << "#include <stdlib.h>\n";
+    out_file << "#include <string.h>\n";
     out_file << "#include \"init.h\"\n\n";
 
     // Hash
     //////////////////////////////////////////////////////////
+
     std::shared_ptr<ScalarVariable> seed = std::make_shared<ScalarVariable>("seed", IntegerType::init(
-                                                                            Type::IntegerTypeID::ULLINT));
+            Type::IntegerTypeID::ULLINT));
     std::shared_ptr<VarUseExpr> seed_use = std::make_shared<VarUseExpr>(seed);
 
     BuiltinType::ScalarTypedVal zero_init(Type::IntegerTypeID::ULLINT);
@@ -247,9 +251,36 @@ void Program::emit_main () {
     seed_decl->emit(out_file);
     out_file << "\n\n";
 
-    out_file << "void hash(unsigned long long int *seed, unsigned long long int const v) {\n";
-    out_file << "    *seed ^= v + 0x9e3779b9 + ((*seed)<<6) + ((*seed)>>2);\n";
-    out_file << "}\n\n";
+    if (options->num_mode == Options::NumMode::INT) {
+        out_file << "void hash(unsigned long long int *seed, unsigned long long int const v) {\n";
+        out_file << "    *seed ^= v + 0x9e3779b9 + ((*seed)<<6) + ((*seed)>>2);\n";
+        out_file << "}\n\n";
+    }
+    else if (options->num_mode == Options::NumMode::FP) {
+        out_file << "FILE* res_file = NULL;\n";
+        out_file << "void open_res_file(const char* file_name) {\n";
+        out_file << "    const char file_suffix [] = \"_res.txt\";\n";
+        out_file << "    const size_t len1 = strlen(file_name);\n";
+        out_file << "    const size_t len2 = strlen(file_suffix);\n";
+        out_file << "    char* result = (char*) malloc(len1+len2+1);\n";
+        out_file << "    memcpy(result, file_name, len1);\n";
+        out_file << "    memcpy(result + len1, file_suffix, len2 + 1);\n";
+        out_file << "    res_file = fopen(result, \"w\");\n";
+        out_file << "    if (res_file == NULL)\n";
+        out_file << "        exit(1);\n";
+        out_file << "}\n\n";
+
+        //TODO: for FP mode seed is useless, but we have to keep it for backward compatibility
+        out_file << "void hash(unsigned long long int *seed, long double v) {\n";
+        out_file << "    fprintf(res_file, \"%Lf\\n\", v);\n";
+        out_file << "}\n\n";
+
+        out_file << "void close_res_file() {\n";
+        out_file << "    fclose(res_file);\n";
+        out_file << "}\n\n";
+    }
+    else
+        ERROR("bad mode");
 
     for (int i = 0; i < gen_policy.get_test_func_count(); ++i) {
         // Definitions and initialization
@@ -304,7 +335,10 @@ void Program::emit_main () {
     // Main
     //////////////////////////////////////////////////////////
     out_file << "\n";
-    out_file << "int main () {\n";
+    out_file << "int main (int argc, char* argv []) {\n";
+    if (options->num_mode == Options::NumMode::FP)
+        out_file << "    open_res_file(argv[0]);\n";
+
     std::string tf_prefix;
     for (int i = 0; i < gen_policy.get_test_func_count(); ++i) {
         tf_prefix = NameHandler::common_test_func_prefix + std::to_string(i) + "_";
@@ -312,7 +346,10 @@ void Program::emit_main () {
         out_file << "    " << tf_prefix << "foo ();\n";
         out_file << "    " << tf_prefix << "checksum ();\n\n";
     }
+
     out_file << "    printf(\"%llu\\n\", seed);\n";
+    if (options->num_mode == Options::NumMode::FP)
+        out_file << "    close_res_file();\n";
     out_file << "    return 0;\n";
     out_file << "}\n";
 
