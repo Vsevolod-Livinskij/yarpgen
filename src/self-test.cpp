@@ -324,7 +324,7 @@ void self_test () {
 
     std::cout << std::static_pointer_cast<ScalarVariable>(std::static_pointer_cast<Struct>(struct0->get_member(0))->get_member(0))->get_cur_value() << std::endl;
     std::cout << std::static_pointer_cast<ScalarVariable>(std::static_pointer_cast<Struct>(struct1->get_member(0))->get_member(0))->get_cur_value() << std::endl;
-    */
+
     std::shared_ptr<IntegerType> int_type_for_arr = IntegerType::init(IntegerType::IntegerTypeID::UINT);
     std::shared_ptr<ArrayType> arr_type = std::make_shared<ArrayType>(int_type_for_arr, 100, ArrayType::STD_VEC);
     arr_type->dbg_dump();
@@ -347,4 +347,30 @@ void self_test () {
     std::cout << "\n====================="<< std::endl;
     std::shared_ptr<Array> array_2 = Array::generate(ctx);
     array_2->dbg_dump();
+
+    GenPolicy gen_policy;
+    std::shared_ptr<Context> ctx = std::make_shared<Context>(gen_policy, nullptr, Node::NodeID::MAX_STMT_ID, true);
+    std::vector<std::shared_ptr<ScalarVariable>> vars;
+    std::vector<std::shared_ptr<Expr>> var_use;
+    for (int i = 0; i < 4; ++i) {
+        vars.push_back(ScalarVariable::generate(ctx));
+        var_use.push_back(std::make_shared<VarUseExpr>(vars.back()));
+    }
+
+    std::shared_ptr<BinaryExpr> bin_expr = BinaryExpr::generate(ctx, var_use, 0);
+    bin_expr->emit(std::cout);
+    std::cout << std::endl;
+    bin_expr->get_raw_complexity().dump();
+
+    std::shared_ptr<ScalarVariable> new_val = std::make_shared<ScalarVariable>("aaa", FPType::init(FPType::FPTypeID::DOUBLE));
+    std::shared_ptr<DeclStmt> decl = std::make_shared<DeclStmt>(new_val, bin_expr);
+    new_val->get_raw_complexity().dump();
+    std::vector<std::shared_ptr<Expr>> new_inp;
+    new_inp.push_back(std::make_shared<VarUseExpr>(new_val));
+
+    std::shared_ptr<BinaryExpr> bin_expr2 = BinaryExpr::generate(ctx, new_inp, 0);
+    bin_expr2->emit(std::cout);
+    std::cout << std::endl;
+    bin_expr2->get_raw_complexity().dump();
+    */
 }

@@ -59,6 +59,7 @@ std::shared_ptr<Expr> VarUseExpr::set_value (std::shared_ptr<Expr> _expr) {
         case Data::VarClassID::VAR:
             //TODO: Add integer type id check. We can't assign different types
             std::static_pointer_cast<ScalarVariable>(value)->set_cur_value(std::static_pointer_cast<ScalarVariable>(_new_value)->get_cur_value());
+            value->get_raw_complexity() = _expr->get_raw_complexity();
             return _expr;
             break;
         case Data::VarClassID::STRUCT:
@@ -76,6 +77,7 @@ std::shared_ptr<Expr> VarUseExpr::set_value (std::shared_ptr<Expr> _expr) {
 }
 
 VarUseExpr::VarUseExpr(std::shared_ptr<Data> _var) : Expr(Node::NodeID::VAR_USE, _var, 1) {
+    complexity = value->get_raw_complexity();
 }
 
 AssignExpr::AssignExpr (std::shared_ptr<Expr> _to, std::shared_ptr<Expr> _from, bool _taken) :
@@ -86,7 +88,10 @@ AssignExpr::AssignExpr (std::shared_ptr<Expr> _to, std::shared_ptr<Expr> _from, 
     }
     propagate_type();
     propagate_value();
-    complexity = to->get_complexity() + from->get_complexity() + 1;
+    to->get_raw_complexity().add_oper_count = from->get_raw_complexity().add_oper_count;
+    to->get_raw_complexity().mul_oper_count = from->get_raw_complexity().mul_oper_count;
+    complexity = from->get_raw_complexity();
+    complexity.full_complexity = to->get_full_complexity() + from->get_full_complexity() + 1;
 }
 
 bool AssignExpr::propagate_type () {
@@ -127,8 +132,9 @@ void AssignExpr::emit (std::ostream& stream, std::string offset) {
 }
 
 TypeCastExpr::TypeCastExpr (std::shared_ptr<Expr> _expr, std::shared_ptr<Type> _type, bool _is_implicit) :
-              Expr(Node::NodeID::TYPE_CAST, nullptr, _expr->get_complexity() + 1),
+              Expr(Node::NodeID::TYPE_CAST, nullptr, _expr->get_full_complexity() + 1),
               expr(_expr), to_type(_type), is_implicit(_is_implicit) {
+    complexity = _expr->get_raw_complexity();
     propagate_type();
     propagate_value();
 }
@@ -152,7 +158,17 @@ UB TypeCastExpr::propagate_value () {
         value = std::make_shared<ScalarVariable>("", std::static_pointer_cast<FPType>(to_type));
     else
         ERROR("can cast only integer or fp types (TypeCastExpr)");
-    std::static_pointer_cast<ScalarVariable>(value)->set_cur_value(std::static_pointer_cast<ScalarVariable>(expr->get_value())->get_cur_value().cast_type(to_type->get_int_type_id()));
+
+    std::shared_ptr<ScalarVariable> expr_val = std::static_pointer_cast<ScalarVariable>(expr->get_value());
+    BuiltinType::ScalarTypedVal new_val (IntegerType::IntegerTypeID::MAX_INT_ID);
+    if (to_type->is_int_type())
+        new_val = expr_val->get_cur_value().cast_type(to_type->get_int_type_id());
+    else if (to_type->is_fp_type())
+        new_val = expr_val->get_cur_value().cast_type(to_type->get_fp_type_id());
+    else
+        ERROR("unsupported type");
+
+    std::static_pointer_cast<ScalarVariable>(value)->set_cur_value(new_val);
     return NoUB;
 }
 
@@ -403,13 +419,13 @@ void ConstExpr::emit (std::ostream& stream, std::string offset) {
     else if (scalar_val->get_type()->is_fp_type()) {
         switch (scalar_val->get_type()->get_fp_type_id()) {
             case FPType::FPTypeID::FLOAT:
-                stream << val.float_val << suffix;
+                stream << std::to_string(val.float_val) << suffix;
                 break;
             case FPType::FPTypeID::DOUBLE:
-                stream << val.double_val << suffix;
+                stream << std::to_string(val.double_val) << suffix;
                 break;
             case FPType::FPTypeID::LONG_DOUBLE:
-                stream << val.long_double_val << suffix;
+                stream << std::to_string(val.long_double_val) << suffix;
                 break;
             case FPType::FPTypeID::MAX_FP_ID:
                 ERROR("bad fp type id (Constexpr)");
@@ -431,8 +447,9 @@ ConstExpr::ConstExpr(BuiltinType::ScalarTypedVal _val) :
 std::shared_ptr<Expr> ArithExpr::integral_prom (std::shared_ptr<Expr> arg) {
     if (arg->get_value()->get_class_id() != Data::VarClassID::VAR)
         ERROR("can perform integral_prom only on ScalarVariable (ArithExpr)");
-    if (!arg->get_value()->get_type()->is_int_type())
-        ERROR("can perform integral_prom only on integer type (ArithExpr)");
+
+    if (arg->get_value()->get_type()->is_fp_type())
+        return arg;
 
     if (!arg->get_value()->get_type()->get_is_bit_field()) {
         //[conv.prom]
@@ -497,7 +514,14 @@ std::shared_ptr<Expr> ArithExpr::gen_level (std::shared_ptr<Context> ctx, std::v
     auto p = ctx->get_gen_policy();
     //TODO: it is a stub for testing. Rewrite it later.
     // Pick random pattern for single statement and apply it to gen_policy. Update Context with new gen_policy.
-    GenPolicy new_gen_policy = choose_and_apply_ssp(*(p));
+    GenPolicy new_gen_policy;
+    if (options->num_mode == Options::NumMode::INT)
+        new_gen_policy = choose_and_apply_ssp(*(p));
+    else if (options->num_mode == Options::NumMode::FP)
+        //TODO: do we need it for FP mode?
+        new_gen_policy = *(p);
+    else
+        ERROR("bad mode");
     std::shared_ptr<Context> new_ctx = std::make_shared<Context>(*(ctx));
     new_ctx->set_gen_policy(new_gen_policy);
 
@@ -552,6 +576,12 @@ std::shared_ptr<Expr> ArithExpr::gen_level (std::shared_ptr<Context> ctx, std::v
     else
         ERROR("inappropriate node type (ArithExpr)");
 //    std::cout << ret->emit() << std::endl;
+    if (options->num_mode == Options::NumMode::FP &&
+       (ret->get_raw_complexity().add_oper_count > p->get_max_arith_expr_add_complexity() ||
+        ret->get_raw_complexity().mul_oper_count > p->get_max_arith_expr_mul_complexity())) {
+        ret = ConstExpr::generate(new_ctx);
+    }
+
     return ret;
 }
 
@@ -603,7 +633,8 @@ UnaryExpr::UnaryExpr (Op _op, std::shared_ptr<Expr> _arg) :
     if (ret_ub != NoUB) {
         rebuild(ret_ub);
     }
-    complexity = arg->get_complexity() + 1;
+    complexity = arg->get_raw_complexity();
+    complexity.full_complexity = arg->get_full_complexity() + 1;
 }
 
 bool UnaryExpr::propagate_type () {
@@ -755,7 +786,24 @@ BinaryExpr::BinaryExpr (Op _op, std::shared_ptr<Expr> lhs, std::shared_ptr<Expr>
     if (ret_ub != NoUB) {
         rebuild(ret_ub);
     }
-    complexity = arg0->get_complexity() + 1 + arg1->get_complexity();
+    //TODO it looks weird, but it is ok for now
+    complexity.add_oper_count = arg0->get_raw_complexity().add_oper_count +
+                                arg1->get_raw_complexity().add_oper_count;
+    complexity.mul_oper_count = arg0->get_raw_complexity().mul_oper_count +
+                                arg1->get_raw_complexity().mul_oper_count;
+    complexity.full_complexity = arg0->get_full_complexity() + 1 + arg1->get_full_complexity();
+    if (op == Add) {
+        complexity.add_oper_count = arg0->get_raw_complexity().add_oper_count +
+                                    arg1->get_raw_complexity().add_oper_count + 1;
+        complexity.mul_oper_count = std::max(arg0->get_raw_complexity().mul_oper_count,
+                                             arg1->get_raw_complexity().mul_oper_count);
+    }
+    else if (op == Mul) {
+        complexity.add_oper_count = (arg0->get_raw_complexity().add_oper_count + 1) *
+                                    (arg1->get_raw_complexity().add_oper_count + 1) - 1;
+        complexity.mul_oper_count = arg0->get_raw_complexity().mul_oper_count +
+                                    arg1->get_raw_complexity().mul_oper_count + 1;
+    }
 }
 
 static uint64_t msb(uint64_t x) {
@@ -867,20 +915,22 @@ void BinaryExpr::perform_arith_conv () {
     if (arg0->get_value()->get_type()->is_fp_type() || arg1->get_value()->get_type()->is_fp_type()) {
         FPType::FPTypeID arg0_fp_type_id;
         FPType::FPTypeID arg1_fp_type_id;
-        if (arg0->get_value()->get_type()->get_fp_type_id() == arg1->get_value()->get_type()->get_fp_type_id())
-            return;
         if (arg0->get_value()->get_type()->is_fp_type() && !arg1->get_value()->get_type()->is_fp_type()) {
             arg0_fp_type_id = arg0->get_value()->get_type()->get_fp_type_id();
             arg1 = std::make_shared<TypeCastExpr>(arg1, FPType::init(arg0_fp_type_id), true);
             return;
         }
         if (!arg0->get_value()->get_type()->is_fp_type() && arg1->get_value()->get_type()->is_fp_type()) {
-            arg1_fp_type_id = arg0->get_value()->get_type()->get_fp_type_id();
+            arg1_fp_type_id = arg1->get_value()->get_type()->get_fp_type_id();
             arg0 = std::make_shared<TypeCastExpr>(arg0, FPType::init(arg1_fp_type_id), true);
             return;
         }
+
+        if (arg0->get_value()->get_type()->get_fp_type_id() == arg1->get_value()->get_type()->get_fp_type_id())
+            return;
+
         arg0_fp_type_id = arg0->get_value()->get_type()->get_fp_type_id();
-        arg1_fp_type_id = arg0->get_value()->get_type()->get_fp_type_id();
+        arg1_fp_type_id = arg1->get_value()->get_type()->get_fp_type_id();
         std::shared_ptr<Type> cast_to_type = FPType::init(std::max(arg0_fp_type_id, arg1_fp_type_id));
         if (arg0_fp_type_id > arg1_fp_type_id) {
             arg1 = std::make_shared<TypeCastExpr>(arg1, cast_to_type, true);
@@ -1189,7 +1239,8 @@ ConditionalExpr::ConditionalExpr (std::shared_ptr<Expr> _cond, std::shared_ptr<E
                                   BinaryExpr(BinaryExpr::Op::Ter, lhs, rhs), condition(_cond) {
     condition = conv_to_bool(condition);
     propagate_value();
-    complexity = condition->get_complexity() + arg0->get_complexity() + arg1->get_complexity() + 1;
+    complexity.full_complexity = condition->get_full_complexity() +
+                                 arg0->get_full_complexity() + arg1->get_full_complexity() + 1;
 }
 
 UB ConditionalExpr::propagate_value() {
@@ -1217,9 +1268,11 @@ UB ConditionalExpr::propagate_value() {
                                         (bool) scalar_cond->get_cur_value().val.int_val;
     new_val = cond_val ? scalar_lhs->get_cur_value() : scalar_rhs->get_cur_value();
 
+    complexity = cond_val ? arg0->get_raw_complexity() : arg1->get_raw_complexity();
+
     if (new_val.is_int_type())
         value = std::make_shared<ScalarVariable>("", IntegerType::init(new_val.get_int_type_id()));
-    else if (new_val.is_int_type())
+    else if (new_val.is_fp_type())
         value = std::make_shared<ScalarVariable>("", FPType::init(new_val.get_fp_type_id()));
     else
         ERROR("unsupported type");
@@ -1315,6 +1368,7 @@ std::shared_ptr<Expr> MemberExpr::set_value (std::shared_ptr<Expr> _expr) {
                 return check_and_set_bit_field(_expr);
             else {
                 std::static_pointer_cast<ScalarVariable>(value)->set_cur_value(std::static_pointer_cast<ScalarVariable>(_new_value)->get_cur_value());
+                value->get_raw_complexity() = _expr->get_raw_complexity();
                 return _expr;
             }
             break;
@@ -1350,6 +1404,7 @@ std::shared_ptr<Expr> MemberExpr::check_and_set_bit_field (std::shared_ptr<Expr>
     BuiltinType::ScalarTypedVal ovf_cmp_val = (bit_field->get_min() > new_val) || (bit_field->get_max() < new_val);
     if (!ovf_cmp_val.val.bool_val) {
         std::static_pointer_cast<ScalarVariable>(value)->set_cur_value(new_val);
+        value->get_raw_complexity() = _expr->get_raw_complexity();
         return _expr;
     }
     //TODO: it is a stub. We need to change it
@@ -1361,6 +1416,7 @@ std::shared_ptr<Expr> MemberExpr::check_and_set_bit_field (std::shared_ptr<Expr>
     std::shared_ptr<Expr> ret = change_to_value(ctx, _expr, to_value);
 
     std::static_pointer_cast<ScalarVariable>(value)->set_cur_value(std::static_pointer_cast<ScalarVariable>(ret->get_value())->get_cur_value());
+    value->get_raw_complexity() = ret->get_raw_complexity();
     return ret;
 }
 
@@ -1394,11 +1450,13 @@ MemberExpr::MemberExpr(std::shared_ptr<Struct> _struct, uint64_t _identifier) :
         Expr(Node::NodeID::MEMBER, _struct, 1), member_expr(nullptr), struct_var(_struct), identifier(_identifier) {
     propagate_type();
     propagate_value();
+    complexity = struct_var->get_raw_complexity();
 }
 
 MemberExpr::MemberExpr(std::shared_ptr<MemberExpr> _member_expr, uint64_t _identifier) :
-        Expr(Node::NodeID::MEMBER, _member_expr->get_value(), _member_expr->get_complexity() + 1),
+        Expr(Node::NodeID::MEMBER, _member_expr->get_value(), _member_expr->get_full_complexity() + 1),
         member_expr(_member_expr), struct_var(nullptr), identifier(_identifier) {
     propagate_type();
     propagate_value();
+    complexity = member_expr->get_raw_complexity();
 }

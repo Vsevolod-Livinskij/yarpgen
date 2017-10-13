@@ -656,7 +656,7 @@ class TypeLONG_DOUBLE : public FPType {
 
     private:
         void init_type () {
-            name = "long_double";
+            name = "long double";
             suffix = "f";
             min.val.long_double_val = std::numeric_limits<long double>::min();
             max.val.long_double_val = std::numeric_limits<long double>::max();;

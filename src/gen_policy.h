@@ -66,8 +66,8 @@ class RandValGen {
 
         template<typename T>
         T get_rand_fp_value (T from, T to) {
-            std::uniform_real_distribution<T> dis(from, to);
-            return dis(rand_gen);
+            std::uniform_int_distribution<int> dis(50, 100);
+            return (T) (dis(rand_gen) / 100.0);
         }
 
         // Randomly chooses one of IDs, basing on std::vector<Probability<id>>.
@@ -254,6 +254,9 @@ class GenPolicy {
         void set_max_test_complexity (uint64_t _compl) { max_test_complexity = _compl; }
         uint64_t get_max_test_complexity () { return max_test_complexity; }
         static uint64_t  get_test_complexity () { return test_complexity; }
+        uint32_t get_max_arith_expr_mul_complexity() { return max_arith_expr_mul_complexity; }
+        uint32_t get_max_arith_expr_add_complexity() { return max_arith_expr_add_complexity; }
+
 
         // Integer types section - defines number and type (bool, char ...) of available integer types
         void rand_init_allowed_int_types ();
@@ -425,6 +428,9 @@ class GenPolicy {
         // Complexity
         static uint64_t test_complexity;
         uint64_t max_test_complexity;
+        // Used in FP mode
+        uint32_t max_arith_expr_mul_complexity;
+        uint32_t max_arith_expr_add_complexity;
 
         // Types
         uint32_t num_of_allowed_int_types;

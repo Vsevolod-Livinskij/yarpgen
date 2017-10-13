@@ -47,6 +47,7 @@ DeclStmt::DeclStmt (std::shared_ptr<Data> _data, std::shared_ptr<Expr> _init, bo
     std::shared_ptr<ScalarVariable> data_var = std::static_pointer_cast<ScalarVariable>(data);
     std::shared_ptr<TypeCastExpr> cast_type = std::make_shared<TypeCastExpr>(init, data_var->get_type());
     data_var->set_init_value(std::static_pointer_cast<ScalarVariable>(cast_type->get_value())->get_cur_value());
+    data_var->get_raw_complexity() = cast_type->get_raw_complexity();
 }
 
 // This function randomly creates new ScalarVariable, its initializing arithmetic expression and
@@ -60,7 +61,7 @@ std::shared_ptr<DeclStmt> DeclStmt::generate (std::shared_ptr<Context> ctx,
     std::shared_ptr<ScalarVariable> new_var = ScalarVariable::generate(ctx);
     std::shared_ptr<Expr> new_init = ArithExpr::generate(ctx, inp);
     if (count_up_total)
-        Expr::increase_expr_count(new_init->get_complexity());
+        Expr::increase_expr_count(new_init->get_full_complexity());
     std::shared_ptr<DeclStmt> ret =  std::make_shared<DeclStmt>(new_var, new_init);
     if (ctx->get_parent_ctx() == nullptr || ctx->get_parent_ctx()->get_local_sym_table() == nullptr) {
         ERROR("no par_ctx or local_sym_table (DeclStmt)");
@@ -151,7 +152,7 @@ void DeclStmt::emit (std::ostream& stream, std::string offset) {
                 stream << "{";
 
             for (int i = 0; i < array_elements_count; ++i) {
-                if (array_type->get_base_type()->is_int_type()) {
+                if (array_type->get_base_type()->is_builtin_type()) {
                     std::shared_ptr<ScalarVariable> elem = std::static_pointer_cast<ScalarVariable>(
                             array->get_element(i));
                     ConstExpr init_const(elem->get_init_value());
@@ -374,7 +375,7 @@ std::shared_ptr<ExprStmt> ExprStmt::generate (std::shared_ptr<Context> ctx,
     std::shared_ptr<Expr> from = ArithExpr::generate(ctx, inp);
     std::shared_ptr<AssignExpr> assign_exp = std::make_shared<AssignExpr>(out, from, ctx->get_taken());
     if (count_up_total)
-        Expr::increase_expr_count(assign_exp->get_complexity());
+        Expr::increase_expr_count(assign_exp->get_full_complexity());
     GenPolicy::add_to_complexity(Node::NodeID::ASSIGN);
     return std::make_shared<ExprStmt>(assign_exp);
 }
@@ -410,7 +411,7 @@ std::shared_ptr<IfStmt> IfStmt::generate (std::shared_ptr<Context> ctx,
     GenPolicy::add_to_complexity(Node::NodeID::IF);
     std::shared_ptr<Expr> cond = ArithExpr::generate(ctx, inp);
     if (count_up_total)
-        Expr::increase_expr_count(cond->get_complexity());
+        Expr::increase_expr_count(cond->get_full_complexity());
     bool else_exist = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_else_prob());
     bool cond_taken = IfStmt::count_if_taken(cond);
     std::shared_ptr<ScopeStmt> then_br = ScopeStmt::generate(std::make_shared<Context>(*(ctx->get_gen_policy()), ctx, Node::NodeID::SCOPE, cond_taken));

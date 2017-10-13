@@ -36,7 +36,8 @@ class Expr : public Node {
               Node(_id), value(_value), complexity(_compl) {}
         Type::TypeID get_type_id () { return value->get_type()->get_type_id (); }
         std::shared_ptr<Data> get_value ();
-        uint32_t get_complexity() { return complexity; }
+        uint32_t get_full_complexity() { return complexity.full_complexity; }
+        virtual Complexity& get_raw_complexity() { return complexity; }
         static void increase_expr_count(uint32_t val) { total_expr_count += val; func_expr_count += val; }
         static uint32_t get_total_expr_count () { return total_expr_count; }
         static void zero_out_func_expr_count () { func_expr_count = 0; }
@@ -53,7 +54,7 @@ class Expr : public Node {
         // in inherited classes). It requires propagate_type() to be called first.
         virtual UB propagate_value () = 0;
         std::shared_ptr<Data> value;
-        uint32_t complexity;
+        Complexity complexity;
 
         // Count of expression over all test program
         static uint32_t total_expr_count;
@@ -68,6 +69,7 @@ class VarUseExpr : public Expr {
     public:
         VarUseExpr (std::shared_ptr<Data> _var);
         std::shared_ptr<Expr> set_value (std::shared_ptr<Expr> _expr);
+        Complexity& get_raw_complexity() { return value->get_raw_complexity(); }
         void emit (std::ostream& stream, std::string offset = "") { stream << value->get_name (); }
 
     private:
@@ -267,6 +269,7 @@ class MemberExpr : public Expr {
         MemberExpr (std::shared_ptr<Struct> _struct, uint64_t _identifier);
         MemberExpr (std::shared_ptr<MemberExpr> _member_expr, uint64_t _identifier);
         std::shared_ptr<Expr> set_value (std::shared_ptr<Expr> _expr);
+        Complexity& get_raw_complexity() { return value->get_raw_complexity(); }
         void emit (std::ostream& stream, std::string offset = "");
 
     private:

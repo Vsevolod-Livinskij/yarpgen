@@ -24,6 +24,19 @@ namespace yarpgen {
 
 class Context;
 
+// Utility class which is designed to handle information about
+// expression and variable (originated from expression) complexity
+struct Complexity {
+    Complexity () : full_complexity(1), add_oper_count(0), mul_oper_count(0) {}
+    Complexity (uint32_t _compl) : full_complexity(_compl), add_oper_count(0), mul_oper_count(0) {}
+
+    //void dump() { std::cout << full_complexity << " | " << add_oper_count << " | " << mul_oper_count << std::endl; }
+
+    uint32_t full_complexity;
+    uint32_t add_oper_count;
+    uint32_t mul_oper_count;
+};
+
 class Data {
     public:
         enum VarClassID {
@@ -36,6 +49,7 @@ class Data {
         std::string get_name () { return name; }
         void set_name (std::string _name) { name = _name; }
         std::shared_ptr<Type> get_type () { return type; }
+        Complexity& get_raw_complexity() { return complexity; }
         virtual void dbg_dump () = 0;
 
         virtual ~Data () {}
@@ -43,6 +57,7 @@ class Data {
     protected:
         std::shared_ptr<Type> type;
         std::string name;
+        Complexity complexity;
 
     private:
         VarClassID class_id;

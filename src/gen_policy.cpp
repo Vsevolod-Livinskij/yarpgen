@@ -18,6 +18,7 @@ limitations under the License.
 #include <map>
 
 #include "gen_policy.h"
+#include "util.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -27,7 +28,7 @@ const uint32_t TEST_FUNC_COUNT = 5;
 
 const uint32_t MAX_ALLOWED_INT_TYPES = 3;
 
-const uint32_t MAX_ARITH_DEPTH = 5;
+const uint32_t MAX_ARITH_DEPTH = 2;
 const uint32_t MAX_TOTAL_EXPR_COUNT = 50000000;
 const uint32_t MAX_FUNC_EXPR_COUNT = 10000000;
 
@@ -47,6 +48,9 @@ const uint32_t MAX_CSE_COUNT = 5;
 const uint32_t MAX_IF_DEPTH = 3;
 
 const uint64_t MAX_TEST_COMPLEXITY = UINT64_MAX;
+
+const uint32_t MAX_ARITH_MUL_COMPLEXITY = 5;
+const uint32_t MAX_ARITH_ADD_COMPLEXITY = 7;
 
 const uint32_t MIN_STRUCT_TYPES_COUNT = 0;
 const uint32_t MAX_STRUCT_TYPES_COUNT = 6;
@@ -108,10 +112,18 @@ GenPolicy::GenPolicy () {
 void GenPolicy::init_from_config () {
     test_func_count = TEST_FUNC_COUNT;
 
-    num_of_allowed_int_types = MAX_ALLOWED_INT_TYPES;
-    rand_init_allowed_int_types();
-
-    allowed_fp_types.emplace_back(Probability<FPType::FPTypeID>(FPType::FPTypeID::FLOAT, 30));
+    if (options->num_mode == Options::NumMode::INT) {
+        num_of_allowed_int_types = MAX_ALLOWED_INT_TYPES;
+        rand_init_allowed_int_types();
+    }
+    else if (options->num_mode == Options::NumMode::FP) {
+        allowed_fp_types.emplace_back(Probability<FPType::FPTypeID>(FPType::FPTypeID::FLOAT, 33));
+        allowed_fp_types.emplace_back(Probability<FPType::FPTypeID>(FPType::FPTypeID::DOUBLE, 33));
+        allowed_fp_types.emplace_back(Probability<FPType::FPTypeID>(FPType::FPTypeID::LONG_DOUBLE, 33));
+        rand_val_gen->shuffle_prob(allowed_fp_types);
+    }
+    else
+        ERROR("bad mode");
 
     allowed_cv_qual.push_back (Type::CV_Qual::NTHG);
 
@@ -212,17 +224,32 @@ void GenPolicy::init_from_config () {
 
     max_cse_count = MAX_CSE_COUNT;
 
-    for (int i = UnaryExpr::Op::Plus; i < UnaryExpr::Op::MaxOp; ++i) {
-        Probability<UnaryExpr::Op> prob ((UnaryExpr::Op) i, 10);
-        allowed_unary_op.push_back (prob);
-    }
-    rand_val_gen->shuffle_prob(allowed_unary_op);
+    if (options->num_mode == Options::NumMode::INT) {
+        for (int i = UnaryExpr::Op::Plus; i < UnaryExpr::Op::MaxOp; ++i) {
+            Probability<UnaryExpr::Op> prob((UnaryExpr::Op) i, 10);
+            allowed_unary_op.push_back(prob);
+        }
+        rand_val_gen->shuffle_prob(allowed_unary_op);
 
-    for (int i = 0; i < BinaryExpr::Op::MaxOp; ++i) {
-        Probability<BinaryExpr::Op> prob ((BinaryExpr::Op) i, 10);
-        allowed_binary_op.push_back (prob);
+        for (int i = 0; i < BinaryExpr::Op::MaxOp; ++i) {
+            Probability<BinaryExpr::Op> prob((BinaryExpr::Op) i, 10);
+            allowed_binary_op.push_back(prob);
+        }
+        rand_val_gen->shuffle_prob(allowed_binary_op);
     }
-    rand_val_gen->shuffle_prob(allowed_binary_op);
+    else if (options->num_mode == Options::NumMode::FP) {
+        allowed_unary_op.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Plus, 10));
+        //allowed_unary_op.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Negate, 10));
+        //allowed_unary_op.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::LogNot, 10));
+        rand_val_gen->shuffle_prob(allowed_unary_op);
+        allowed_binary_op.emplace_back(Probability<BinaryExpr::Op>(BinaryExpr::Op::Add, 10));
+        allowed_binary_op.emplace_back(Probability<BinaryExpr::Op>(BinaryExpr::Op::Mul, 10));
+        //allowed_binary_op.emplace_back(Probability<BinaryExpr::Op>(BinaryExpr::Op::Div, 10));
+        //allowed_binary_op.emplace_back(Probability<BinaryExpr::Op>(BinaryExpr::Op::Sub, 10));
+        rand_val_gen->shuffle_prob(allowed_binary_op);
+    }
+    else
+        ERROR("bad mode");
 
     Probability<Node::NodeID> decl_gen (Node::NodeID::DECL, 10);
     stmt_gen_prob.push_back (decl_gen);
@@ -320,6 +347,9 @@ void GenPolicy::init_from_config () {
     max_if_depth = MAX_IF_DEPTH;
 
     max_test_complexity = MAX_TEST_COMPLEXITY;
+
+    max_arith_expr_mul_complexity = MAX_ARITH_MUL_COMPLEXITY;
+    max_arith_expr_add_complexity = MAX_ARITH_ADD_COMPLEXITY;
 
     default_was_loaded = true;
 }

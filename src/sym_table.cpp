@@ -81,7 +81,7 @@ void SymbolTable::del_member_in_arrays(int idx) {
 void SymbolTable::var_use_exprs_from_vars_in_arrays (std::vector<std::shared_ptr<Expr>>& ret) {
     for (auto const& array_iter : array) {
         std::shared_ptr<ArrayType> array_iter_type = std::static_pointer_cast<ArrayType>(array_iter->get_type());
-        if (array_iter_type->get_base_type()->is_int_type())
+        if (array_iter_type->get_base_type()->is_builtin_type())
             for (int i = 0; i < array_iter->get_elements_count(); ++i)
                 ret.emplace_back(std::make_shared<VarUseExpr>(array_iter->get_element(i)));
     }
