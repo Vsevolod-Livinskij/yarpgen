@@ -165,11 +165,11 @@ void ScalarVariable::dbg_dump () {
 }
 
 std::shared_ptr<ScalarVariable> ScalarVariable::generate(std::shared_ptr<Context> ctx) {
-    if (options->num_mode == Options::NumMode::INT) {
+    if (options->is_int_mode()) {
         std::shared_ptr<IntegerType> int_type = IntegerType::generate(ctx);
         return ScalarVariable::generate(ctx, int_type);
     }
-    else if (options->num_mode == Options::NumMode::FP) {
+    else if (options->is_fp_mode()) {
         std::shared_ptr<FPType> fp_type = FPType::generate(ctx);
         return ScalarVariable::generate(ctx, fp_type);
     }

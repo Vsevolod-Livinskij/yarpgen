@@ -181,12 +181,12 @@ std::shared_ptr<StructType> StructType::generate (std::shared_ptr<Context> ctx,
         primary_static_spec = rand_val_gen->get_rand_value(false, true);
 
     std::shared_ptr<Type> primary_type;
-    if (options->num_mode == Options::NumMode::INT) {
+    if (options->is_int_mode()) {
         IntegerType::IntegerTypeID int_type_id = rand_val_gen->get_rand_id(p->get_allowed_int_types());
         //TODO: what about align?
         primary_type = IntegerType::init(int_type_id, primary_cv_qual, primary_static_spec, 0);
     }
-    else if (options->num_mode == Options::NumMode::FP) {
+    else if (options->is_fp_mode()) {
         FPType::FPTypeID fp_type_id = rand_val_gen->get_rand_id(p->get_allowed_fp_types());
         //TODO: what about align?
         primary_type = FPType::init(fp_type_id, primary_cv_qual, primary_static_spec, 0);
@@ -221,7 +221,7 @@ std::shared_ptr<StructType> StructType::generate (std::shared_ptr<Context> ctx,
                 GenPolicy::BitFieldID bit_field_dis = rand_val_gen->get_rand_id(p->get_bit_field_prob());
                 // In C, bit-field may be declared with a type other than unsigned int or signed int
                 // only with "J.5.8 Extended bit-field types"
-                bit_field_dis = (options->num_mode == Options::NumMode::FP) ? GenPolicy::BitFieldID::MAX_BIT_FIELD_ID :
+                bit_field_dis = (options->is_fp_mode()) ? GenPolicy::BitFieldID::MAX_BIT_FIELD_ID :
                                 bit_field_dis;
                 if (options->is_c()) {
                     auto search_allowed_bit_filed_type = [] (Probability<IntegerType::IntegerTypeID> prob) {
@@ -243,9 +243,9 @@ std::shared_ptr<StructType> StructType::generate (std::shared_ptr<Context> ctx,
                     primary_static_spec = false; // BitField can't be static member of struct
                 }
                 else
-                    if (options->num_mode == Options::NumMode::INT)
+                    if (options->is_int_mode())
                         primary_type = IntegerType::generate(ctx);
-                    else if (options->num_mode == Options::NumMode::FP)
+                    else if (options->is_fp_mode())
                         primary_type = FPType::generate(ctx);
                     else
                         ERROR("unsupported type");
@@ -2454,9 +2454,9 @@ std::shared_ptr<ArrayType> ArrayType::generate(std::shared_ptr<Context> ctx) {
     Type::TypeID base_type_id = rand_val_gen->get_rand_id(p->get_array_base_type_prob());
     std::shared_ptr<Type> base_type;
     if (base_type_id == TypeID::BUILTIN_TYPE || ctx->get_extern_inp_sym_table()->get_struct_types().size() == 0) {
-        if (options->num_mode == Options::NumMode::INT)
+        if (options->is_int_mode())
             base_type = IntegerType::generate(ctx);
-        else if (options->num_mode == Options::NumMode::FP)
+        else if (options->is_fp_mode())
             base_type = FPType::generate(ctx);
         else
             ERROR("unsupported type");

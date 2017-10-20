@@ -251,12 +251,12 @@ void Program::emit_main () {
     seed_decl->emit(out_file);
     out_file << "\n\n";
 
-    if (options->num_mode == Options::NumMode::INT) {
+    if (options->is_int_mode()) {
         out_file << "void hash(unsigned long long int *seed, unsigned long long int const v) {\n";
         out_file << "    *seed ^= v + 0x9e3779b9 + ((*seed)<<6) + ((*seed)>>2);\n";
         out_file << "}\n\n";
     }
-    else if (options->num_mode == Options::NumMode::FP) {
+    else if (options->is_fp_mode()) {
         out_file << "FILE* res_file = NULL;\n";
         out_file << "void open_res_file(const char* file_name) {\n";
         out_file << "    const char file_suffix [] = \"_res.txt\";\n";
@@ -336,7 +336,7 @@ void Program::emit_main () {
     //////////////////////////////////////////////////////////
     out_file << "\n";
     out_file << "int main (int argc, char* argv []) {\n";
-    if (options->num_mode == Options::NumMode::FP)
+    if (options->is_fp_mode())
         out_file << "    open_res_file(argv[0]);\n";
 
     std::string tf_prefix;
@@ -348,7 +348,7 @@ void Program::emit_main () {
     }
 
     out_file << "    printf(\"%llu\\n\", seed);\n";
-    if (options->num_mode == Options::NumMode::FP)
+    if (options->is_fp_mode())
         out_file << "    close_res_file();\n";
     out_file << "    return 0;\n";
     out_file << "}\n";

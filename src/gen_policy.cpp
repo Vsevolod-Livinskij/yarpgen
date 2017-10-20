@@ -112,11 +112,11 @@ GenPolicy::GenPolicy () {
 void GenPolicy::init_from_config () {
     test_func_count = TEST_FUNC_COUNT;
 
-    if (options->num_mode == Options::NumMode::INT) {
+    if (options->is_int_mode()) {
         num_of_allowed_int_types = MAX_ALLOWED_INT_TYPES;
         rand_init_allowed_int_types();
     }
-    else if (options->num_mode == Options::NumMode::FP) {
+    else if (options->is_fp_mode()) {
         allowed_fp_types.emplace_back(Probability<FPType::FPTypeID>(FPType::FPTypeID::FLOAT, 33));
         allowed_fp_types.emplace_back(Probability<FPType::FPTypeID>(FPType::FPTypeID::DOUBLE, 33));
         allowed_fp_types.emplace_back(Probability<FPType::FPTypeID>(FPType::FPTypeID::LONG_DOUBLE, 33));
@@ -224,7 +224,7 @@ void GenPolicy::init_from_config () {
 
     max_cse_count = MAX_CSE_COUNT;
 
-    if (options->num_mode == Options::NumMode::INT) {
+    if (options->is_int_mode()) {
         for (int i = UnaryExpr::Op::Plus; i < UnaryExpr::Op::MaxOp; ++i) {
             Probability<UnaryExpr::Op> prob((UnaryExpr::Op) i, 10);
             allowed_unary_op.push_back(prob);
@@ -237,7 +237,7 @@ void GenPolicy::init_from_config () {
         }
         rand_val_gen->shuffle_prob(allowed_binary_op);
     }
-    else if (options->num_mode == Options::NumMode::FP) {
+    else if (options->is_fp_mode()) {
         allowed_unary_op.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Plus, 10));
         //allowed_unary_op.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Negate, 10));
         //allowed_unary_op.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::LogNot, 10));

@@ -175,9 +175,9 @@ UB TypeCastExpr::propagate_value () {
 std::shared_ptr<TypeCastExpr> TypeCastExpr::generate (std::shared_ptr<Context> ctx, std::shared_ptr<Expr> from) {
     GenPolicy::add_to_complexity(Node::NodeID::TYPE_CAST);
     std::shared_ptr<Type> to_type;
-    if (options->num_mode == Options::NumMode::INT)
+    if (options->is_int_mode())
         to_type = IntegerType::generate(ctx);
-    else if (options->num_mode == Options::NumMode::FP)
+    else if (options->is_fp_mode())
         to_type = FPType::generate(ctx);
     else
         ERROR("Bad mode");
@@ -216,7 +216,7 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
     auto p = ctx->get_gen_policy();
 
     // Arithmetic with floating point doesn't require complicated constant generation
-    if (options->num_mode == Options::NumMode::FP) {
+    if (options->is_fp_mode()) {
         FPType::FPTypeID fp_type_id = FPType::generate(ctx)->get_fp_type_id();
         return std::make_shared<ConstExpr>(BuiltinType::ScalarTypedVal::generate(ctx, fp_type_id));
     }
@@ -302,7 +302,7 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
 void ConstExpr::fill_const_buf (std::shared_ptr<Context> ctx) {
     // Arithmetic with floating point doesn't require complicated constant generation,
     // so we don't use these buffers
-    if (options->num_mode == Options::NumMode::FP)
+    if (options->is_fp_mode())
         return;
 
     // Wipe out old information
@@ -515,9 +515,9 @@ std::shared_ptr<Expr> ArithExpr::gen_level (std::shared_ptr<Context> ctx, std::v
     //TODO: it is a stub for testing. Rewrite it later.
     // Pick random pattern for single statement and apply it to gen_policy. Update Context with new gen_policy.
     GenPolicy new_gen_policy;
-    if (options->num_mode == Options::NumMode::INT)
+    if (options->is_int_mode())
         new_gen_policy = choose_and_apply_ssp(*(p));
-    else if (options->num_mode == Options::NumMode::FP)
+    else if (options->is_fp_mode())
         //TODO: do we need it for FP mode?
         new_gen_policy = *(p);
     else
@@ -576,7 +576,7 @@ std::shared_ptr<Expr> ArithExpr::gen_level (std::shared_ptr<Context> ctx, std::v
     else
         ERROR("inappropriate node type (ArithExpr)");
 //    std::cout << ret->emit() << std::endl;
-    if (options->num_mode == Options::NumMode::FP &&
+    if (options->is_fp_mode() &&
        (ret->get_raw_complexity().add_oper_count > p->get_max_arith_expr_add_complexity() ||
         ret->get_raw_complexity().mul_oper_count > p->get_max_arith_expr_mul_complexity())) {
         ret = ConstExpr::generate(new_ctx);
