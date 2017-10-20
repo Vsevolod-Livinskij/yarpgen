@@ -188,7 +188,7 @@ struct ArithSSP : public Pattern {
 };
 
 struct ConstPattern : public Pattern {
-    enum SpecialConst {
+    enum class IntSpecialConst {
         Zero = 0,
         One = 1,
         Two = 2,
@@ -196,13 +196,21 @@ struct ConstPattern : public Pattern {
         Four = 4,
         Eight = 8,
         Sixteen = 16,
-        MAX_SPECIAL_CONST // Maximal value for type
+        MAX_INT_SPECIAL_CONST // Maximal value for type
     };
 
     enum NewConstKind {
         EndBits, // Continuous bit block at the beginning or end
         BitBlock, // Continuous bit block in the middle
         MAX_NEW_CONST_KIND // New non-special constant
+    };
+
+    enum class FPSpecialConst {
+        Quarter,
+        Half,
+        One,
+        Two,
+        MAX_FP_SPECIAL_CONST // Maximal value for type
     };
 };
 ///////////////////////////////////////////////////////////////////////////////
@@ -399,7 +407,8 @@ class GenPolicy {
         uint32_t get_const_buffer_size () { return const_buffer_size; }
         std::vector<Probability<bool>>& get_new_const_prob () { return new_const_prob; }
         std::vector<Probability<bool>>& get_new_const_type_prob () { return new_const_type_prob; }
-        std::vector<Probability<ConstPattern::SpecialConst>>& get_special_const_prob () { return special_const_prob; }
+        std::vector<Probability<ConstPattern::IntSpecialConst>>& get_int_special_const_prob() { return int_special_const_prob; }
+        std::vector<Probability<ConstPattern::FPSpecialConst>>& get_fp_special_const_prob() { return fp_special_const_prob; }
         std::vector<Probability<ConstPattern::NewConstKind>>& get_new_const_kind_prob () { return new_const_kind_prob; }
         std::vector<Probability<UnaryExpr::Op>>& get_const_transform_prob () { return const_transform_prob; }
 
@@ -515,7 +524,8 @@ class GenPolicy {
         uint32_t const_buffer_size;
         std::vector<Probability<bool>> new_const_prob;
         std::vector<Probability<bool>> new_const_type_prob;
-        std::vector<Probability<ConstPattern::SpecialConst>> special_const_prob;
+        std::vector<Probability<ConstPattern::IntSpecialConst>> int_special_const_prob;
+        std::vector<Probability<ConstPattern::FPSpecialConst>> fp_special_const_prob;
         std::vector<Probability<ConstPattern::NewConstKind>> new_const_kind_prob;
         std::vector<Probability<UnaryExpr::Op>> const_transform_prob;
 

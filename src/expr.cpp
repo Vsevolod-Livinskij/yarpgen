@@ -215,11 +215,63 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
     GenPolicy::add_to_complexity(Node::NodeID::CONST);
     auto p = ctx->get_gen_policy();
 
-    // Arithmetic with floating point doesn't require complicated constant generation
+    // Branch for floating point types
     if (options->is_fp_mode()) {
-        FPType::FPTypeID fp_type_id = FPType::generate(ctx)->get_fp_type_id();
-        return std::make_shared<ConstExpr>(BuiltinType::ScalarTypedVal::generate(ctx, fp_type_id));
+        // Randomly choose if we want to create new constant or somehow reuse the old one
+        bool gen_new_const = rand_val_gen->get_rand_id(p->get_new_const_prob());
+        // Main logical part
+        BuiltinType::ScalarTypedVal new_val (Type::FPTypeID::MAX_FP_ID);
+        if (gen_new_const || arith_const_buffer.empty()) {
+            // Randomly pick type of new constant
+            bool gen_new_type = rand_val_gen->get_rand_id(p->get_new_const_type_prob());
+            FPType::FPTypeID fp_type_id;
+            if (gen_new_type || arith_const_buffer.empty())
+                fp_type_id = FPType::generate(ctx)->get_fp_type_id();
+            else
+                fp_type_id = rand_val_gen->get_rand_elem(arith_const_buffer).get_fp_type_id();
+            new_val = BuiltinType::ScalarTypedVal(fp_type_id);
+
+            // Randomly choose what kind of special constant we want
+            ConstPattern::FPSpecialConst spec_const_id = rand_val_gen->get_rand_id(p->get_fp_special_const_prob());
+            long double spec_const_val = 0.0;
+            switch (spec_const_id) {
+                case ConstPattern::FPSpecialConst::Quarter:
+                    spec_const_val = 0.25l;
+                    break;
+                case ConstPattern::FPSpecialConst::Half:
+                    spec_const_val = 0.5l;
+                    break;
+                case ConstPattern::FPSpecialConst::One:
+                    spec_const_val = 1.0l;
+                    break;
+                case ConstPattern::FPSpecialConst::Two:
+                    spec_const_val = 2.0l;
+                    break;
+                case ConstPattern::FPSpecialConst::MAX_FP_SPECIAL_CONST:
+                    ERROR("Bad ConstPattern::FPSpecialConst");
+            }
+            switch (fp_type_id) {
+                case FPType::FPTypeID::FLOAT:
+                    new_val.set_fp_val((float) spec_const_val);
+                    break;
+                case FPType::FPTypeID::DOUBLE:
+                    new_val.set_fp_val((double) spec_const_val);
+                    break;
+                case FPType::FPTypeID::LONG_DOUBLE:
+                    new_val.set_fp_val((long double) spec_const_val);
+                    break;
+                case FPType::FPTypeID::MAX_FP_ID:
+                    ERROR("Bad FPType::FPTypeID");
+            }
+        }
+        else {
+            BuiltinType::ScalarTypedVal &buf_elem = rand_val_gen->get_rand_elem(arith_const_buffer);
+            new_val = buf_elem;
+        }
+        return std::make_shared<ConstExpr>(new_val);
     }
+
+    assert(options->is_int_mode() && "All of the rest can be applied only to IntegerType");
 
     // Randomly choose if we want to create new constant or somehow reuse the old one
     bool gen_new_const = rand_val_gen->get_rand_id(p->get_new_const_prob());
@@ -257,20 +309,20 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
         new_val = BuiltinType::ScalarTypedVal(int_type_id);
 
         // Randomly choose what kind of special constant we want
-        ConstPattern::SpecialConst spec_const_id = rand_val_gen->get_rand_id(p->get_special_const_prob());
-        if (spec_const_id < ConstPattern::SpecialConst::MAX_SPECIAL_CONST) {
+        ConstPattern::IntSpecialConst spec_const_id = rand_val_gen->get_rand_id(p->get_int_special_const_prob());
+        if (spec_const_id < ConstPattern::IntSpecialConst::MAX_INT_SPECIAL_CONST) {
             // Magic numbers (0, 1, 2, ...)
-            new_val.set_abs_val(spec_const_id);
+            new_val.set_abs_val(static_cast<uint64_t>(spec_const_id));
             bool negative_sign = rand_val_gen->get_rand_value(false, true);
             if (negative_sign && tmp_int_type->get_is_signed())
                 new_val = perform_unary_op(UnaryExpr::Negate, new_val);
         }
-        else if (spec_const_id == ConstPattern::SpecialConst::MAX_SPECIAL_CONST) {
+        else if (spec_const_id == ConstPattern::IntSpecialConst::MAX_INT_SPECIAL_CONST) {
             bool use_max = rand_val_gen->get_rand_value(false, true);
             new_val = use_max ? tmp_int_type->get_max() : tmp_int_type->get_min();
         }
         else
-            ERROR("Bad id for ConstPattern::SpecialConst");
+            ERROR("Bad id for ConstPattern::IntSpecialConst");
     }
     else {
         BuiltinType::ScalarTypedVal& buf_elem = rand_val_gen->get_rand_elem(actual_const_buffer);
@@ -300,16 +352,23 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
 }
 
 void ConstExpr::fill_const_buf (std::shared_ptr<Context> ctx) {
-    // Arithmetic with floating point doesn't require complicated constant generation,
-    // so we don't use these buffers
-    if (options->is_fp_mode())
-        return;
-
     // Wipe out old information
     arith_const_buffer.clear();
     bit_log_const_buffer.clear();
 
     auto p = ctx->get_gen_policy();
+
+    // Floating point numbers can be used only in arithmetic context
+    // so we don't use bit_log_const_buffer
+    if (options->is_fp_mode()) {
+        for (uint64_t i = 0; i < p->get_const_buffer_size(); i++) {
+            FPType::FPTypeID fp_type_id = FPType::generate(ctx)->get_fp_type_id();
+            arith_const_buffer.push_back(BuiltinType::ScalarTypedVal::generate(ctx, fp_type_id));
+        }
+        return;
+    }
+
+    assert(options->is_int_mode() && "All of the rest can be applied only to IntegerType");
 
     // Fill buffer for constants, used in arithmetic context
     for (uint64_t i = 0; i < p->get_const_buffer_size(); i++) {

@@ -238,6 +238,8 @@ class BuiltinType : public Type {
                 //TODO: it is a stub for shift rebuild. Can we do it better?
                 uint64_t get_abs_val ();
                 void set_abs_val (uint64_t new_val);
+                template <typename T>
+                void set_fp_val (T _val);
 
                 // Functions which implements UB detection and semantics of all operators
                 ScalarTypedVal cast_type (Type::IntegerTypeID to_type_id);
@@ -305,6 +307,15 @@ class BuiltinType : public Type {
     private:
         BuiltinTypeID builtin_id;
 };
+
+template <>
+inline void BuiltinType::ScalarTypedVal::set_fp_val (float _val) { val.float_val = _val; }
+
+template <>
+inline void BuiltinType::ScalarTypedVal::set_fp_val (double _val) { val.double_val = _val; }
+
+template <>
+inline void BuiltinType::ScalarTypedVal::set_fp_val (long double _val) { val.long_double_val = _val; }
 
 std::ostream& operator<< (std::ostream &out, const BuiltinType::ScalarTypedVal &scalar_typed_val);
 
@@ -657,7 +668,7 @@ class TypeLONG_DOUBLE : public FPType {
     private:
         void init_type () {
             name = "long double";
-            suffix = "f";
+            suffix = "l";
             min.val.long_double_val = std::numeric_limits<long double>::min();
             max.val.long_double_val = std::numeric_limits<long double>::max();;
             bit_size = sizeof (long double) * CHAR_BIT;
