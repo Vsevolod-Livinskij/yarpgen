@@ -185,6 +185,12 @@ struct ArithSSP : public Pattern {
         ADD_MUL,  // +, - (unary and binary) and *
         MAX_SIMILAR_OP
     };
+
+    enum LockType {
+        ONLY_SINGLE_INT,
+        ONLY_SINGLE_FP,
+        MAX_LOCK_TYPE
+    };
 };
 
 struct ConstPattern : public Pattern {
@@ -273,6 +279,7 @@ class GenPolicy {
         std::vector<Probability<IntegerType::IntegerTypeID>>& get_allowed_int_types () { return allowed_int_types; }
         void add_allowed_int_type (Probability<IntegerType::IntegerTypeID> allowed_int_type) { allowed_int_types.push_back(allowed_int_type); }
 
+        void rand_init_allowed_fp_types ();
         std::vector<Probability<FPType::FPTypeID>>& get_allowed_fp_types () { return allowed_fp_types; }
 
         // cv-qualifiers section - defines available cv-qualifiers (nothing, const, volatile, const volatile)
@@ -402,6 +409,9 @@ class GenPolicy {
         std::vector<Probability<ArithSSP::SimilarOp>>& get_allowed_arith_ssp_similar_op () { return allowed_arith_ssp_similar_op; }
         ArithSSP::SimilarOp get_chosen_arith_ssp_similar_op () { return chosen_arith_ssp_similar_op; }
         GenPolicy apply_arith_ssp_similar_op (ArithSSP::SimilarOp pattern_id);
+        std::vector<Probability<ArithSSP::LockType>>& get_allowed_lock_type_ssp () { return allowed_lock_type_ssp; }
+        ArithSSP::LockType get_chosen_lock_type_ssp () { return chosen_lock_type_ssp; }
+        GenPolicy apply_lock_type_ssp (ArithSSP::LockType pattern_id);
 
         // Constant generation
         uint32_t get_const_buffer_size () { return const_buffer_size; }
@@ -444,6 +454,7 @@ class GenPolicy {
         // Types
         uint32_t num_of_allowed_int_types;
         std::vector<Probability<IntegerType::IntegerTypeID>> allowed_int_types;
+        uint32_t num_of_allowed_fp_types;
         std::vector<Probability<FPType::FPTypeID>> allowed_fp_types;
 
         // cv-qualifiers
@@ -519,6 +530,8 @@ class GenPolicy {
         ArithSSP::ConstUse chosen_arith_ssp_const_use;
         std::vector<Probability<ArithSSP::SimilarOp>> allowed_arith_ssp_similar_op;
         ArithSSP::SimilarOp chosen_arith_ssp_similar_op;
+        std::vector<Probability<ArithSSP::LockType>> allowed_lock_type_ssp;
+        ArithSSP::LockType chosen_lock_type_ssp;
 
         // Constant generation
         uint32_t const_buffer_size;

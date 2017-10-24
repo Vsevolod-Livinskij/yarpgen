@@ -27,6 +27,7 @@ using namespace yarpgen;
 const uint32_t TEST_FUNC_COUNT = 5;
 
 const uint32_t MAX_ALLOWED_INT_TYPES = 3;
+const uint32_t MAX_ALLOWED_FP_TYPES = 3;
 
 const uint32_t MAX_ARITH_DEPTH = 3;
 const uint32_t MAX_TOTAL_EXPR_COUNT = 50000000;
@@ -117,10 +118,8 @@ void GenPolicy::init_from_config () {
         rand_init_allowed_int_types();
     }
     else if (options->is_fp_mode()) {
-        allowed_fp_types.emplace_back(Probability<FPType::FPTypeID>(FPType::FPTypeID::FLOAT, 33));
-        allowed_fp_types.emplace_back(Probability<FPType::FPTypeID>(FPType::FPTypeID::DOUBLE, 33));
-        allowed_fp_types.emplace_back(Probability<FPType::FPTypeID>(FPType::FPTypeID::LONG_DOUBLE, 33));
-        rand_val_gen->shuffle_prob(allowed_fp_types);
+        num_of_allowed_fp_types = MAX_ALLOWED_FP_TYPES;
+        rand_init_allowed_fp_types();
     }
     else
         ERROR("bad mode");
@@ -313,6 +312,19 @@ void GenPolicy::init_from_config () {
 
     chosen_arith_ssp_similar_op = ArithSSP::SimilarOp::MAX_SIMILAR_OP;
 
+    if (options->is_int_mode()) {
+        allowed_lock_type_ssp.emplace_back(Probability<ArithSSP::LockType>(ArithSSP::LockType::ONLY_SINGLE_INT, 10));
+    }
+    else if (options->is_fp_mode()) {
+        allowed_lock_type_ssp.emplace_back(Probability<ArithSSP::LockType>(ArithSSP::LockType::ONLY_SINGLE_FP, 10));
+    }
+    else
+        ERROR("bad mode");
+    allowed_lock_type_ssp.emplace_back(Probability<ArithSSP::LockType>(ArithSSP::LockType::MAX_LOCK_TYPE, 60));
+    rand_val_gen->shuffle_prob(allowed_lock_type_ssp);
+
+    chosen_lock_type_ssp = ArithSSP::LockType::MAX_LOCK_TYPE;
+
     const_buffer_size = CONST_BUFFER_SIZE;
     new_const_prob.emplace_back(Probability<bool>(true, 50));
     new_const_prob.emplace_back(Probability<bool>(false, 50));
@@ -444,23 +456,66 @@ GenPolicy GenPolicy::apply_arith_ssp_similar_op (ArithSSP::SimilarOp pattern_id)
     return new_policy;
 }
 
-void GenPolicy::rand_init_allowed_int_types () {
-    allowed_int_types.clear ();
-    std::vector<IntegerType::IntegerTypeID> tmp_allowed_int_types;
+GenPolicy GenPolicy::apply_lock_type_ssp (ArithSSP::LockType pattern_id) {
+    chosen_lock_type_ssp = pattern_id;
+    GenPolicy new_policy = *this;
+
+    auto lock_single_type = [] (auto& allowed_types, uint32_t& num_of_allowed_types) {
+        num_of_allowed_types = 1;
+        auto picked_type_prob = rand_val_gen->get_rand_id(allowed_types);
+        allowed_types.clear();
+        allowed_types.push_back(Probability<decltype(picked_type_prob)>(picked_type_prob, 1));
+    };
+
+    switch (pattern_id) {
+        case ArithSSP::LockType::MAX_LOCK_TYPE:
+            break;
+        case ArithSSP::LockType::ONLY_SINGLE_INT:
+            lock_single_type(new_policy.get_allowed_int_types(), new_policy.num_of_allowed_int_types);
+            new_policy.num_of_allowed_fp_types = 0;
+            new_policy.allowed_fp_types.clear();
+            break;
+        case ArithSSP::LockType::ONLY_SINGLE_FP:
+            lock_single_type(new_policy.get_allowed_fp_types(), new_policy.num_of_allowed_fp_types);
+            new_policy.num_of_allowed_int_types = 0;
+            new_policy.allowed_int_types.clear();
+            break;
+    }
+    return new_policy;
+}
+
+template <typename T>
+static std::vector<Probability<T>> rand_init_types (uint32_t num_of_types, T max_type_id, bool (*skip_func) (T) = nullptr) {
+    std::vector<T> tmp_allowed_types;
     uint32_t gen_types = 0;
-    while (gen_types < num_of_allowed_int_types) {
-        auto type = (IntegerType::IntegerTypeID) rand_val_gen->get_rand_value(0, IntegerType::IntegerTypeID::MAX_INT_ID - 1);
-        if (type == IntegerType::IntegerTypeID::BOOL && options->is_c())
+    while (gen_types < num_of_types) {
+        auto type = (T) rand_val_gen->get_rand_value(0, max_type_id - 1);
+        if (skip_func && skip_func(type))
             continue;
-        if (std::find(tmp_allowed_int_types.begin(), tmp_allowed_int_types.end(), type) == tmp_allowed_int_types.end()) {
-            tmp_allowed_int_types.push_back (type);
+        if (std::find(tmp_allowed_types.begin(), tmp_allowed_types.end(), type) == tmp_allowed_types.end()) {
+            tmp_allowed_types.push_back (type);
             gen_types++;
         }
     }
-    for (auto i : tmp_allowed_int_types) {
-        Probability<IntegerType::IntegerTypeID> prob (i, 1);
-        allowed_int_types.push_back (prob);
+    std::vector<Probability<T>> ret;
+    for (auto i : tmp_allowed_types) {
+        Probability<T> prob (i, 1);
+        ret.push_back (prob);
     }
+    return ret;
+}
+
+void GenPolicy::rand_init_allowed_int_types () {
+     bool (*skip_func) (IntegerType::IntegerTypeID) = [] (IntegerType::IntegerTypeID int_type_id) -> bool {
+        return int_type_id == IntegerType::IntegerTypeID::BOOL && options->is_c();
+    };
+    allowed_int_types = rand_init_types(num_of_allowed_int_types, IntegerType::IntegerTypeID::MAX_INT_ID, skip_func);
+    rand_val_gen->shuffle_prob(allowed_int_types);
+}
+
+void GenPolicy::rand_init_allowed_fp_types () {
+    allowed_fp_types = rand_init_types(num_of_allowed_fp_types, FPType::FPTypeID::MAX_FP_ID);
+    rand_val_gen->shuffle_prob(allowed_fp_types);
 }
 
 void GenPolicy::set_cv_qual(bool value, Type::CV_Qual cv_qual) {

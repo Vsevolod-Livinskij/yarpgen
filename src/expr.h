@@ -161,6 +161,8 @@ class ArithExpr : public Expr {
         static GenPolicy choose_and_apply_ssp_const_use (GenPolicy old_gen_policy);
         // This function chooses one of ArithSSP::SimilarOp patterns and combines old_gen_policy with it
         static GenPolicy choose_and_apply_ssp_similar_op (GenPolicy old_gen_policy);
+        // This function chooses one of ArithSSP::LockType patterns and combines old_gen_policy with it
+        static GenPolicy choose_and_apply_lock_type_ssp (GenPolicy old_gen_policy);
         // Bridge to choose_and_apply_ssp_const_use and choose_and_apply_ssp_similar_op. This function combines both of them.
         static GenPolicy choose_and_apply_ssp (GenPolicy old_gen_policy);
         // Top-level recursive function for expression tree generation

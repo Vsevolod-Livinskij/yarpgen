@@ -215,20 +215,41 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
     GenPolicy::add_to_complexity(Node::NodeID::CONST);
     auto p = ctx->get_gen_policy();
 
+    auto exclude_from_buf = [] (std::vector<BuiltinType::ScalarTypedVal>& buf,
+                                IntegerType::IntegerTypeID int_type_id, FPType::FPTypeID fp_type_id) {
+        auto cmp_func = [int_type_id, fp_type_id] (auto& vec_elem) -> bool {
+            return vec_elem.get_int_type_id() != int_type_id ||
+                   vec_elem.get_fp_type_id() != fp_type_id;
+        };
+        buf.erase(std::remove_if(buf.begin(), buf.end(), cmp_func), buf.end());
+    };
+    ArithSSP::LockType chosen_lock_type_ssp = p->get_chosen_lock_type_ssp();
+
     // Branch for floating point types
     if (options->is_fp_mode()) {
         // Randomly choose if we want to create new constant or somehow reuse the old one
         bool gen_new_const = rand_val_gen->get_rand_id(p->get_new_const_prob());
+        std::vector<BuiltinType::ScalarTypedVal>& actual_const_buffer = arith_const_buffer;
+
+        // Adjust constant buffer to chosen LockType pattern
+        std::vector<BuiltinType::ScalarTypedVal> tmp_const_vec;
+        if (chosen_lock_type_ssp == ArithSSP::ONLY_SINGLE_FP) {
+            tmp_const_vec = arith_const_buffer;
+            actual_const_buffer = tmp_const_vec;
+            exclude_from_buf(actual_const_buffer, IntegerType::IntegerTypeID::MAX_INT_ID,
+                             p->get_allowed_fp_types().front().get_id());
+        }
+
         // Main logical part
         BuiltinType::ScalarTypedVal new_val (Type::FPTypeID::MAX_FP_ID);
-        if (gen_new_const || arith_const_buffer.empty()) {
+        if (gen_new_const || actual_const_buffer.empty()) {
             // Randomly pick type of new constant
             bool gen_new_type = rand_val_gen->get_rand_id(p->get_new_const_type_prob());
             FPType::FPTypeID fp_type_id;
-            if (gen_new_type || arith_const_buffer.empty())
+            if (gen_new_type || actual_const_buffer.empty())
                 fp_type_id = FPType::generate(ctx)->get_fp_type_id();
             else
-                fp_type_id = rand_val_gen->get_rand_elem(arith_const_buffer).get_fp_type_id();
+                fp_type_id = rand_val_gen->get_rand_elem(actual_const_buffer).get_fp_type_id();
             new_val = BuiltinType::ScalarTypedVal(fp_type_id);
 
             // Randomly choose what kind of special constant we want
@@ -265,7 +286,7 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
             }
         }
         else {
-            BuiltinType::ScalarTypedVal &buf_elem = rand_val_gen->get_rand_elem(arith_const_buffer);
+            BuiltinType::ScalarTypedVal &buf_elem = rand_val_gen->get_rand_elem(actual_const_buffer);
             new_val = buf_elem;
         }
         return std::make_shared<ConstExpr>(new_val);
@@ -287,6 +308,15 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
     std::vector<BuiltinType::ScalarTypedVal>& actual_const_buffer = arith_const_buffer;
     if (bit_log_ctx)
         actual_const_buffer = bit_log_const_buffer;
+
+    // Adjust constant buffer to chosen LockType pattern
+    std::vector<BuiltinType::ScalarTypedVal> tmp_const_vec;
+    if (chosen_lock_type_ssp == ArithSSP::ONLY_SINGLE_INT) {
+        tmp_const_vec = actual_const_buffer;
+        actual_const_buffer = tmp_const_vec;
+        exclude_from_buf(actual_const_buffer, p->get_allowed_int_types().front().get_id(),
+                         FPType::FPTypeID::MAX_FP_ID);
+    }
 
     // Utility function for various transformation of constants
     auto perform_unary_op = [] (UnaryExpr::Op op, BuiltinType::ScalarTypedVal val) -> BuiltinType::ScalarTypedVal {
@@ -556,9 +586,20 @@ GenPolicy ArithExpr::choose_and_apply_ssp_similar_op (GenPolicy old_gen_policy) 
     return old_gen_policy.apply_arith_ssp_similar_op (arith_ssp_similar_op_id);
 }
 
+GenPolicy ArithExpr::choose_and_apply_lock_type_ssp (GenPolicy old_gen_policy) {
+    if (old_gen_policy.get_chosen_lock_type_ssp () == ArithSSP::LockType::ONLY_SINGLE_FP ||
+        old_gen_policy.get_chosen_lock_type_ssp () == ArithSSP::LockType::ONLY_SINGLE_INT)
+        return old_gen_policy;
+    ArithSSP::LockType lock_type_ssp_id = rand_val_gen->get_rand_id (old_gen_policy.get_allowed_lock_type_ssp());
+    //std::cerr << "lock_type_ssp_id: " << lock_type_ssp_id << std::endl;
+    return old_gen_policy.apply_lock_type_ssp(lock_type_ssp_id);
+}
+
 GenPolicy ArithExpr::choose_and_apply_ssp (GenPolicy gen_policy) {
     GenPolicy new_policy = choose_and_apply_ssp_const_use(gen_policy);
-    new_policy = choose_and_apply_ssp_similar_op(new_policy);
+    if (options->is_int_mode())
+        new_policy = choose_and_apply_ssp_similar_op(new_policy);
+    new_policy = choose_and_apply_lock_type_ssp(new_policy);
     return new_policy;
 }
 
@@ -574,19 +615,31 @@ std::shared_ptr<Expr> ArithExpr::gen_level (std::shared_ptr<Context> ctx, std::v
     //TODO: it is a stub for testing. Rewrite it later.
     // Pick random pattern for single statement and apply it to gen_policy. Update Context with new gen_policy.
     GenPolicy new_gen_policy;
-    if (options->is_int_mode())
-        new_gen_policy = choose_and_apply_ssp(*(p));
-    else if (options->is_fp_mode())
-        //TODO: do we need it for FP mode?
-        new_gen_policy = *(p);
-    else
-        ERROR("bad mode");
+    new_gen_policy = choose_and_apply_ssp(*(p));
     std::shared_ptr<Context> new_ctx = std::make_shared<Context>(*(ctx));
     new_ctx->set_gen_policy(new_gen_policy);
 
     // Pick random ID of the node being create.
     GenPolicy::ArithLeafID node_type = rand_val_gen->get_rand_id (p->get_arith_leaves());
     std::shared_ptr<Expr> ret = nullptr;
+
+    ArithSSP::LockType chosen_lock_type_ssp = p->get_chosen_lock_type_ssp();
+    if (chosen_lock_type_ssp != ArithSSP::LockType::MAX_LOCK_TYPE) {
+        auto exclude_from_inp = [&inp] (IntegerType::IntegerTypeID int_type_id, FPType::FPTypeID fp_type_id) {
+            auto cmp_func = [int_type_id, fp_type_id](auto &vec_elem) -> bool {
+                return vec_elem->get_value()->get_type()->get_int_type_id() != int_type_id ||
+                       vec_elem->get_value()->get_type()->get_fp_type_id() != fp_type_id;
+            };
+            inp.erase(std::remove_if(inp.begin(), inp.end(), cmp_func), inp.end());
+        };
+
+        if (chosen_lock_type_ssp == ArithSSP::LockType::ONLY_SINGLE_INT)
+            exclude_from_inp(p->get_allowed_int_types().front().get_id(), FPType::FPTypeID::MAX_FP_ID);
+        else if (chosen_lock_type_ssp == ArithSSP::LockType::ONLY_SINGLE_FP)
+            exclude_from_inp(IntegerType::IntegerTypeID::MAX_INT_ID, p->get_allowed_fp_types().front().get_id());
+        else
+            ERROR("bad ArithSSP::LockType id");
+    }
 
     // If we want to use any Data, we've reached expression tree depth limit or
     // total Arithmetic Expression number, or we want to use CSE but don't have any,
