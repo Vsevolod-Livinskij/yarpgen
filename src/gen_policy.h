@@ -281,6 +281,10 @@ class GenPolicy {
 
         void rand_init_allowed_fp_types ();
         std::vector<Probability<FPType::FPTypeID>>& get_allowed_fp_types () { return allowed_fp_types; }
+        float get_fp_min_limit () { return fp_min_limit; }
+        float get_fp_max_limit () { return fp_max_limit; }
+        uint32_t get_fp_mul_min () { return fp_mul_min; }
+        uint32_t get_fp_mul_max () { return fp_mul_max; }
 
         // cv-qualifiers section - defines available cv-qualifiers (nothing, const, volatile, const volatile)
         // TODO: Add check for options compability? Should allow_volatile + allow_const be equal to allow_const_volatile?
@@ -400,6 +404,7 @@ class GenPolicy {
         // TODO: add depth control
         std::vector<std::shared_ptr<Expr>>& get_cse () { return cse; };
         void add_cse (std::shared_ptr<Expr> expr) { cse.push_back(expr); }
+        void clear_cse () { cse.clear(); }
         std::vector<Probability<ArithCSEGenID>>& get_arith_cse_gen () { return arith_cse_gen; }
 
         // Single statement pattern
@@ -436,6 +441,14 @@ class GenPolicy {
         void set_max_if_depth (uint32_t _max_if_depth) { max_if_depth = _max_if_depth; }
         uint32_t get_max_if_depth () { return max_if_depth; }
 
+        // Mode options
+        std::vector<Probability<bool>>& get_int_over_fp_prob () { return int_over_fp_prob; }
+        std::vector<Probability<bool>>& get_change_from_mix_mode_prob() { return change_from_mix_mode_prob; }
+        Options::NumMode get_chosen_num_mode () { return chosen_num_mode; }
+        void set_chosen_num_mode (Options::NumMode new_num_mode) { chosen_num_mode = new_num_mode;
+                                                                   adjust_to_num_mode(chosen_num_mode); }
+        void adjust_to_num_mode (Options::NumMode _num_mode);
+
         ///////////////////////////////////////////////////////////////////////
 
     private:
@@ -451,11 +464,20 @@ class GenPolicy {
         uint32_t max_arith_expr_mul_complexity;
         uint32_t max_arith_expr_add_complexity;
 
+        // Mode
+        Options::NumMode chosen_num_mode;
+        std::vector<Probability<bool>> int_over_fp_prob;
+        std::vector<Probability<bool>> change_from_mix_mode_prob;
+
         // Types
         uint32_t num_of_allowed_int_types;
         std::vector<Probability<IntegerType::IntegerTypeID>> allowed_int_types;
         uint32_t num_of_allowed_fp_types;
         std::vector<Probability<FPType::FPTypeID>> allowed_fp_types;
+        float fp_min_limit;
+        float fp_max_limit;
+        uint32_t fp_mul_min;
+        uint32_t fp_mul_max;
 
         // cv-qualifiers
         void set_cv_qual(bool value, Type::CV_Qual cv_qual);

@@ -165,16 +165,18 @@ void ScalarVariable::dbg_dump () {
 }
 
 std::shared_ptr<ScalarVariable> ScalarVariable::generate(std::shared_ptr<Context> ctx) {
-    if (options->is_int_mode()) {
+    auto p = ctx->get_gen_policy();
+    Options::NumMode num_mode = p->get_chosen_num_mode();
+    if (num_mode == Options::NumMode::MIX)
+        num_mode = (Options::NumMode) rand_val_gen->get_rand_id(p->get_int_over_fp_prob());
+    if (num_mode == Options::NumMode::INT) {
         std::shared_ptr<IntegerType> int_type = IntegerType::generate(ctx);
         return ScalarVariable::generate(ctx, int_type);
     }
-    else if (options->is_fp_mode()) {
+    else {
         std::shared_ptr<FPType> fp_type = FPType::generate(ctx);
         return ScalarVariable::generate(ctx, fp_type);
     }
-    else
-        ERROR("unsupported type");
 }
 
 std::shared_ptr<ScalarVariable> ScalarVariable::generate(std::shared_ptr<Context> ctx,

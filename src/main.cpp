@@ -68,6 +68,7 @@ void print_usage_and_exit (std::string error_msg = "") {
     std::cout << "\t-d, --out-dir=<out-dir>   Output directory\n";
     std::cout << "\t-s, --seed=<seed>         Predefined seed (it is accepted in form of SSS or VV_SSS)\n";
     std::cout << "\t-m, --bit-mode=<32/64>    Generated test's bit mode\n";
+    std::cout << "\t--num-mode=<int/fp/mix>   Generated test's num mode\n";
     std::cout << "\t--std=<standard>          Generated test's language standard\n";
     auto search_for_default_std = [] (const std::pair<std::string, Options::StandardID> &pair) {
         return pair.second == options->standard_id;
@@ -179,6 +180,23 @@ int main (int argc, char* argv[128]) {
         }
     };
 
+    // Detects YARPGen num_mode
+    auto num_mode_action = [] (std::string arg) {
+        try {
+            if (arg == "int")
+                options->num_mode = Options::NumMode::INT;
+            else if (arg == "fp")
+                options->num_mode = Options::NumMode::FP;
+            else if (arg == "mix")
+                options->num_mode = Options::NumMode::MIX;
+            else
+                print_usage_and_exit("Can't recognize num_mode: " + std::string(arg));
+        }
+        catch (std::invalid_argument& e) {
+            print_usage_and_exit("Can't recognize num_mode: " + arg);
+        }
+    };
+
     // Main loop for parsing command-line options
     for (int i = 0; i < argc; ++i) {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) {
@@ -193,6 +211,8 @@ int main (int argc, char* argv[128]) {
         }
         else if (parse_long_args(i, argv, "--std", standard_action,
                                  "Can't recognize language standard:")) {}
+        else if (parse_long_args(i, argv, "--num-mode", num_mode_action,
+                                 "Can't recognize num_mode:")) {}
         else if (parse_long_and_short_args(argc, i, argv, "-d", "--out-dir", out_dir_action,
                                            "Output directory wasn't specified.")) {}
         else if (parse_long_and_short_args(argc, i, argv, "-s", "--seed", seed_action,

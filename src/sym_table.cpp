@@ -126,9 +126,13 @@ void SymbolTable::emit_variable_def (std::ostream& stream, std::string offset) {
     }
 }
 
+static inline std::string get_hash_prefix(bool is_int_type) {
+    return is_int_type ? "int_" : "fp_";
+}
+
 void SymbolTable::emit_variable_check (std::ostream& stream, std::string offset) {
     for (const auto &i : variable) {
-        stream << offset + "hash(&seed, " + i->get_name() + ");\n";
+        stream << offset << get_hash_prefix(i->get_type()->is_int_type()) << "hash(&seed, " + i->get_name() + ");\n";
     }
 }
 
@@ -216,7 +220,7 @@ void SymbolTable::emit_single_struct_check (std::shared_ptr<MemberExpr> parent_m
             emit_single_struct_check(member_expr, std::static_pointer_cast<Struct>(struct_var->get_member(j)),
                                      stream, offset);
         else {
-            stream << offset + "hash(&seed, ";
+            stream << offset << get_hash_prefix(member_expr->get_value()->get_type()->is_int_type()) << "hash(&seed, ";
             member_expr->emit(stream);
             stream << ");\n";
         }
@@ -275,7 +279,8 @@ void SymbolTable::emit_array_check (std::ostream& stream, std::string offset) {
             std::shared_ptr<Data> array_elem = i->get_element(j);
             switch (array_elem->get_class_id()) {
                 case Data::VAR:
-                    stream << offset + "hash(&seed, " + array_elem->get_name() + ");\n";
+                    stream << offset << get_hash_prefix(array_elem->get_type()->is_int_type()) <<
+                                        "hash(&seed, " + array_elem->get_name() + ");\n";
                     break;
                 case Data::STRUCT:
                     emit_single_struct_check(nullptr, std::static_pointer_cast<Struct>(array_elem), stream, offset);

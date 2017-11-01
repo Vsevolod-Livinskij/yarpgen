@@ -43,9 +43,10 @@ struct Options {
     // This map matches StandardIDs to string literals for them
     static const std::map<std::string, StandardID> str_to_standard;
 
-    enum NumMode { INT, FP};
+    enum NumMode { INT, FP, MIX};
     bool is_int_mode () { return num_mode == INT; }
     bool is_fp_mode () { return num_mode == FP; }
+    bool is_mix_mode () { return num_mode == MIX; }
 
     Options();
     bool is_c ();

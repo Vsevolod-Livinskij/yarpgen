@@ -29,6 +29,11 @@ const uint32_t TEST_FUNC_COUNT = 5;
 const uint32_t MAX_ALLOWED_INT_TYPES = 3;
 const uint32_t MAX_ALLOWED_FP_TYPES = 3;
 
+const float FP_MIN_LIMIT = 0.01;
+const float FP_MAX_LIMIT = 4.0;
+const uint32_t FP_MUL_MIN = 2;
+const uint32_t FP_MUL_MAX = 4;
+
 const uint32_t MAX_ARITH_DEPTH = 3;
 const uint32_t MAX_TOTAL_EXPR_COUNT = 50000000;
 const uint32_t MAX_FUNC_EXPR_COUNT = 10000000;
@@ -113,16 +118,29 @@ GenPolicy::GenPolicy () {
 void GenPolicy::init_from_config () {
     test_func_count = TEST_FUNC_COUNT;
 
-    if (options->is_int_mode()) {
+    chosen_num_mode = options->num_mode;
+
+    int_over_fp_prob.emplace_back(Probability<bool>(true, 70));
+    int_over_fp_prob.emplace_back(Probability<bool>(false, 30));
+    rand_val_gen->shuffle_prob(int_over_fp_prob);
+
+    change_from_mix_mode_prob.emplace_back(Probability<bool>(true, 30));
+    change_from_mix_mode_prob.emplace_back(Probability<bool>(false, 70));
+    rand_val_gen->shuffle_prob(change_from_mix_mode_prob);
+
+    if (options->is_int_mode() || options->is_mix_mode()) {
         num_of_allowed_int_types = MAX_ALLOWED_INT_TYPES;
         rand_init_allowed_int_types();
     }
-    else if (options->is_fp_mode()) {
+    if (options->is_fp_mode() || options->is_mix_mode()) {
         num_of_allowed_fp_types = MAX_ALLOWED_FP_TYPES;
         rand_init_allowed_fp_types();
     }
-    else
-        ERROR("bad mode");
+
+    fp_min_limit = FP_MIN_LIMIT;
+    fp_max_limit = FP_MAX_LIMIT;
+    fp_mul_min = FP_MUL_MIN;
+    fp_mul_max = FP_MUL_MAX;
 
     allowed_cv_qual.push_back (Type::CV_Qual::NTHG);
 
@@ -223,32 +241,7 @@ void GenPolicy::init_from_config () {
 
     max_cse_count = MAX_CSE_COUNT;
 
-    if (options->is_int_mode()) {
-        for (int i = UnaryExpr::Op::Plus; i < UnaryExpr::Op::MaxOp; ++i) {
-            Probability<UnaryExpr::Op> prob((UnaryExpr::Op) i, 10);
-            allowed_unary_op.push_back(prob);
-        }
-        rand_val_gen->shuffle_prob(allowed_unary_op);
-
-        for (int i = 0; i < BinaryExpr::Op::MaxOp; ++i) {
-            Probability<BinaryExpr::Op> prob((BinaryExpr::Op) i, 10);
-            allowed_binary_op.push_back(prob);
-        }
-        rand_val_gen->shuffle_prob(allowed_binary_op);
-    }
-    else if (options->is_fp_mode()) {
-        allowed_unary_op.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Plus, 10));
-        //allowed_unary_op.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Negate, 10));
-        //allowed_unary_op.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::LogNot, 10));
-        rand_val_gen->shuffle_prob(allowed_unary_op);
-        allowed_binary_op.emplace_back(Probability<BinaryExpr::Op>(BinaryExpr::Op::Add, 10));
-        allowed_binary_op.emplace_back(Probability<BinaryExpr::Op>(BinaryExpr::Op::Mul, 10));
-        //allowed_binary_op.emplace_back(Probability<BinaryExpr::Op>(BinaryExpr::Op::Div, 10));
-        //allowed_binary_op.emplace_back(Probability<BinaryExpr::Op>(BinaryExpr::Op::Sub, 10));
-        rand_val_gen->shuffle_prob(allowed_binary_op);
-    }
-    else
-        ERROR("bad mode");
+    adjust_to_num_mode(options->num_mode);
 
     Probability<Node::NodeID> decl_gen (Node::NodeID::DECL, 10);
     stmt_gen_prob.push_back (decl_gen);
@@ -312,14 +305,14 @@ void GenPolicy::init_from_config () {
 
     chosen_arith_ssp_similar_op = ArithSSP::SimilarOp::MAX_SIMILAR_OP;
 
+    //TODO: enable for mix mode
     if (options->is_int_mode()) {
         allowed_lock_type_ssp.emplace_back(Probability<ArithSSP::LockType>(ArithSSP::LockType::ONLY_SINGLE_INT, 10));
     }
     else if (options->is_fp_mode()) {
         allowed_lock_type_ssp.emplace_back(Probability<ArithSSP::LockType>(ArithSSP::LockType::ONLY_SINGLE_FP, 10));
     }
-    else
-        ERROR("bad mode");
+
     allowed_lock_type_ssp.emplace_back(Probability<ArithSSP::LockType>(ArithSSP::LockType::MAX_LOCK_TYPE, 60));
     rand_val_gen->shuffle_prob(allowed_lock_type_ssp);
 
@@ -369,6 +362,36 @@ void GenPolicy::init_from_config () {
     max_arith_expr_add_complexity = MAX_ARITH_ADD_COMPLEXITY;
 
     default_was_loaded = true;
+}
+
+void GenPolicy::adjust_to_num_mode (Options::NumMode num_mode) {
+    chosen_num_mode = num_mode;
+    if (chosen_num_mode == Options::NumMode::INT) {
+        for (int i = UnaryExpr::Op::Plus; i < UnaryExpr::Op::MaxOp; ++i) {
+            Probability<UnaryExpr::Op> prob((UnaryExpr::Op) i, 10);
+            allowed_unary_op.push_back(prob);
+        }
+        rand_val_gen->shuffle_prob(allowed_unary_op);
+
+        for (int i = 0; i < BinaryExpr::Op::MaxOp; ++i) {
+            Probability<BinaryExpr::Op> prob((BinaryExpr::Op) i, 10);
+            allowed_binary_op.push_back(prob);
+        }
+        rand_val_gen->shuffle_prob(allowed_binary_op);
+    }
+    else if (chosen_num_mode == Options::NumMode::FP || chosen_num_mode == Options::NumMode::MIX) {
+        allowed_unary_op.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Plus, 10));
+        //allowed_unary_op.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Negate, 10));
+        //allowed_unary_op.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::LogNot, 10));
+        rand_val_gen->shuffle_prob(allowed_unary_op);
+        allowed_binary_op.emplace_back(Probability<BinaryExpr::Op>(BinaryExpr::Op::Add, 10));
+        allowed_binary_op.emplace_back(Probability<BinaryExpr::Op>(BinaryExpr::Op::Mul, 10));
+        //allowed_binary_op.emplace_back(Probability<BinaryExpr::Op>(BinaryExpr::Op::Div, 10));
+        //allowed_binary_op.emplace_back(Probability<BinaryExpr::Op>(BinaryExpr::Op::Sub, 10));
+        rand_val_gen->shuffle_prob(allowed_binary_op);
+    }
+    else
+        ERROR("bad mode");
 }
 
 void GenPolicy::copy_data (std::shared_ptr<GenPolicy> old) {

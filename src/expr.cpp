@@ -161,10 +161,18 @@ UB TypeCastExpr::propagate_value () {
 
     std::shared_ptr<ScalarVariable> expr_val = std::static_pointer_cast<ScalarVariable>(expr->get_value());
     BuiltinType::ScalarTypedVal new_val (IntegerType::IntegerTypeID::MAX_INT_ID);
-    if (to_type->is_int_type())
+    if (to_type->is_int_type()) {
         new_val = expr_val->get_cur_value().cast_type(to_type->get_int_type_id());
-    else if (to_type->is_fp_type())
+    }
+    else if (to_type->is_fp_type()) {
+        if (expr_val->get_type()->is_int_type()) {
+            BuiltinType::ScalarTypedVal old_val = expr_val->get_cur_value();
+            std::shared_ptr<ConstExpr> tmp_const = std::make_shared<ConstExpr>(old_val);
+            expr = std::make_shared<BinaryExpr>(BinaryExpr::Div, expr, tmp_const);
+            expr_val = std::static_pointer_cast<ScalarVariable>(expr->get_value());
+        }
         new_val = expr_val->get_cur_value().cast_type(to_type->get_fp_type_id());
+    }
     else
         ERROR("unsupported type");
 
@@ -175,12 +183,14 @@ UB TypeCastExpr::propagate_value () {
 std::shared_ptr<TypeCastExpr> TypeCastExpr::generate (std::shared_ptr<Context> ctx, std::shared_ptr<Expr> from) {
     GenPolicy::add_to_complexity(Node::NodeID::TYPE_CAST);
     std::shared_ptr<Type> to_type;
-    if (options->is_int_mode())
+    auto p = ctx->get_gen_policy();
+    Options::NumMode num_mode = p->get_chosen_num_mode();
+    if (num_mode == Options::NumMode::MIX)
+        num_mode = (Options::NumMode) rand_val_gen->get_rand_id(p->get_int_over_fp_prob());
+    if (num_mode == Options::NumMode::INT)
         to_type = IntegerType::generate(ctx);
-    else if (options->is_fp_mode())
-        to_type = FPType::generate(ctx);
     else
-        ERROR("Bad mode");
+        to_type = FPType::generate(ctx);
     return std::make_shared<TypeCastExpr> (from, to_type, false);
 }
 
@@ -194,7 +204,8 @@ void TypeCastExpr::emit (std::ostream& stream, std::string offset) {
     stream << ")";
 }
 
-std::vector<BuiltinType::ScalarTypedVal> ConstExpr::arith_const_buffer;
+std::vector<BuiltinType::ScalarTypedVal> ConstExpr::int_arith_const_buffer;
+std::vector<BuiltinType::ScalarTypedVal> ConstExpr::fp_arith_const_buffer;
 std::vector<BuiltinType::ScalarTypedVal> ConstExpr::bit_log_const_buffer;
 
 //TODO: maybe variadic template function would be better?
@@ -225,16 +236,20 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
     };
     ArithSSP::LockType chosen_lock_type_ssp = p->get_chosen_lock_type_ssp();
 
+    Options::NumMode num_mode = p->get_chosen_num_mode();
+    if (num_mode == Options::NumMode::MIX)
+        num_mode = (Options::NumMode) rand_val_gen->get_rand_id(p->get_int_over_fp_prob());
+
     // Branch for floating point types
-    if (options->is_fp_mode()) {
+    if (num_mode != Options::NumMode::INT) {
         // Randomly choose if we want to create new constant or somehow reuse the old one
         bool gen_new_const = rand_val_gen->get_rand_id(p->get_new_const_prob());
-        std::vector<BuiltinType::ScalarTypedVal>& actual_const_buffer = arith_const_buffer;
+        std::vector<BuiltinType::ScalarTypedVal>& actual_const_buffer = fp_arith_const_buffer;
 
         // Adjust constant buffer to chosen LockType pattern
         std::vector<BuiltinType::ScalarTypedVal> tmp_const_vec;
         if (chosen_lock_type_ssp == ArithSSP::ONLY_SINGLE_FP) {
-            tmp_const_vec = arith_const_buffer;
+            tmp_const_vec = fp_arith_const_buffer;
             actual_const_buffer = tmp_const_vec;
             exclude_from_buf(actual_const_buffer, IntegerType::IntegerTypeID::MAX_INT_ID,
                              p->get_allowed_fp_types().front().get_id());
@@ -292,7 +307,8 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
         return std::make_shared<ConstExpr>(new_val);
     }
 
-    assert(options->is_int_mode() && "All of the rest can be applied only to IntegerType");
+    assert((num_mode == Options::NumMode::INT || num_mode == Options::NumMode::MIX) &&
+            "All of the rest can be applied only to IntegerType");
 
     // Randomly choose if we want to create new constant or somehow reuse the old one
     bool gen_new_const = rand_val_gen->get_rand_id(p->get_new_const_prob());
@@ -305,7 +321,7 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
                        chosen_arith_ssp_similar_op == ArithSSP::SimilarOp::MAX_SIMILAR_OP;
 
     // Determine actual buffer of used constants based on type of context
-    std::vector<BuiltinType::ScalarTypedVal>& actual_const_buffer = arith_const_buffer;
+    std::vector<BuiltinType::ScalarTypedVal>& actual_const_buffer = int_arith_const_buffer;
     if (bit_log_ctx)
         actual_const_buffer = bit_log_const_buffer;
 
@@ -383,27 +399,30 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
 
 void ConstExpr::fill_const_buf (std::shared_ptr<Context> ctx) {
     // Wipe out old information
-    arith_const_buffer.clear();
+    int_arith_const_buffer.clear();
+    fp_arith_const_buffer.clear();
     bit_log_const_buffer.clear();
 
     auto p = ctx->get_gen_policy();
 
     // Floating point numbers can be used only in arithmetic context
     // so we don't use bit_log_const_buffer
-    if (options->is_fp_mode()) {
+    if (options->is_fp_mode() || options->is_mix_mode()) {
         for (uint64_t i = 0; i < p->get_const_buffer_size(); i++) {
             FPType::FPTypeID fp_type_id = FPType::generate(ctx)->get_fp_type_id();
-            arith_const_buffer.push_back(BuiltinType::ScalarTypedVal::generate(ctx, fp_type_id));
+            fp_arith_const_buffer.push_back(BuiltinType::ScalarTypedVal::generate(ctx, fp_type_id));
         }
-        return;
+        if (options->is_fp_mode())
+            return;
     }
 
-    assert(options->is_int_mode() && "All of the rest can be applied only to IntegerType");
+    assert((options->is_int_mode() || options->is_mix_mode()) &&
+           "All of the rest can be applied only to IntegerType");
 
     // Fill buffer for constants, used in arithmetic context
     for (uint64_t i = 0; i < p->get_const_buffer_size(); i++) {
         IntegerType::IntegerTypeID int_type_id = IntegerType::generate(ctx)->get_int_type_id();
-        arith_const_buffer.push_back(BuiltinType::ScalarTypedVal::generate(ctx, int_type_id));
+        int_arith_const_buffer.push_back(BuiltinType::ScalarTypedVal::generate(ctx, int_type_id));
     }
 
     // Utility function for EndBits and BitBlock
@@ -597,7 +616,7 @@ GenPolicy ArithExpr::choose_and_apply_lock_type_ssp (GenPolicy old_gen_policy) {
 
 GenPolicy ArithExpr::choose_and_apply_ssp (GenPolicy gen_policy) {
     GenPolicy new_policy = choose_and_apply_ssp_const_use(gen_policy);
-    if (options->is_int_mode())
+    if (gen_policy.get_chosen_num_mode() == Options::NumMode::INT)
         new_policy = choose_and_apply_ssp_similar_op(new_policy);
     new_policy = choose_and_apply_lock_type_ssp(new_policy);
     return new_policy;
@@ -615,6 +634,21 @@ std::shared_ptr<Expr> ArithExpr::gen_level (std::shared_ptr<Context> ctx, std::v
     //TODO: it is a stub for testing. Rewrite it later.
     // Pick random pattern for single statement and apply it to gen_policy. Update Context with new gen_policy.
     GenPolicy new_gen_policy;
+    if (p->get_chosen_num_mode() == Options::NumMode::MIX) {
+        // Choose if we want to change mode
+        if (rand_val_gen->get_rand_id(p->get_change_from_mix_mode_prob())) {
+            Options::NumMode new_num_mode = (Options::NumMode) rand_val_gen->get_rand_id(p->get_int_over_fp_prob());
+            new_gen_policy.set_chosen_num_mode(new_num_mode);
+            auto exclude_from_inp = [&inp] (bool only_int) {
+                auto cmp_func = [&only_int](auto &vec_elem) -> bool {
+                return only_int ? vec_elem->get_value()->get_type()->get_fp_type_id() != FPType::FPTypeID::MAX_FP_ID :
+                                  vec_elem->get_value()->get_type()->get_int_type_id() != IntegerType::IntegerTypeID::MAX_INT_ID;
+                };
+                inp.erase(std::remove_if(inp.begin(), inp.end(), cmp_func), inp.end());
+            };
+            exclude_from_inp(new_num_mode == Options::NumMode::INT);
+        }
+    }
     new_gen_policy = choose_and_apply_ssp(*(p));
     std::shared_ptr<Context> new_ctx = std::make_shared<Context>(*(ctx));
     new_ctx->set_gen_policy(new_gen_policy);
@@ -688,12 +722,47 @@ std::shared_ptr<Expr> ArithExpr::gen_level (std::shared_ptr<Context> ctx, std::v
     else
         ERROR("inappropriate node type (ArithExpr)");
 //    std::cout << ret->emit() << std::endl;
-    if (options->is_fp_mode() &&
-       (ret->get_raw_complexity().add_oper_count > p->get_max_arith_expr_add_complexity() ||
-        ret->get_raw_complexity().mul_oper_count > p->get_max_arith_expr_mul_complexity())) {
-        ret = ConstExpr::generate(new_ctx);
-    }
+    if ((p->get_chosen_num_mode() == Options::NumMode::FP ||
+         p->get_chosen_num_mode() == Options::NumMode::MIX)) {
+        BuiltinType::ScalarTypedVal tmp_ret_val = std::static_pointer_cast<ScalarVariable>(ret->get_value())->get_cur_value();
+        if (tmp_ret_val.is_fp_type()) {
+            // Sometimes FP values exceed our artificial limits, so we have to force them to be under limits
 
+            // Auxiliary function, which sets FP values and converts them to desired type
+            auto set_corr_fp_value = [&tmp_ret_val] (BuiltinType::ScalarTypedVal& limit_val, float val) {
+                limit_val.val.float_val = val;
+                limit_val = limit_val.cast_type(tmp_ret_val.get_fp_type_id());
+            };
+
+            BuiltinType::ScalarTypedVal min_fp = BuiltinType::ScalarTypedVal(FPType::FPTypeID::FLOAT);
+            set_corr_fp_value(min_fp, p->get_fp_min_limit());
+            BuiltinType::ScalarTypedVal max_fp = BuiltinType::ScalarTypedVal(FPType::FPTypeID::FLOAT);
+            set_corr_fp_value(max_fp, p->get_fp_max_limit());
+            BuiltinType::ScalarTypedVal zero_fp = BuiltinType::ScalarTypedVal(FPType::FPTypeID::FLOAT);
+            set_corr_fp_value(max_fp, 0.0);
+
+            // Main correction function
+            auto apply_fp_correction = [&ret, &tmp_ret_val, &p, &set_corr_fp_value] (bool is_under_min) {
+                BuiltinType::ScalarTypedVal fp_mul = BuiltinType::ScalarTypedVal(FPType::FPTypeID::FLOAT);
+                set_corr_fp_value(fp_mul, rand_val_gen->get_rand_value(p->get_fp_mul_min(), p->get_fp_mul_max()));
+                fp_mul = fp_mul * tmp_ret_val;
+                std::shared_ptr<ConstExpr> fp_const = std::make_shared<ConstExpr>(fp_mul);
+                if (is_under_min)
+                    ret = std::make_shared<BinaryExpr>(BinaryExpr::Op::Div, fp_const, ret);
+                else
+                    ret = std::make_shared<BinaryExpr>(BinaryExpr::Op::Div, ret, fp_const);
+            };
+
+            if ((zero_fp < tmp_ret_val).val.bool_val && (tmp_ret_val < min_fp).val.bool_val)
+                apply_fp_correction(true);
+            else if ((tmp_ret_val > max_fp).val.bool_val)
+                apply_fp_correction(false);
+        }
+        if (ret->get_raw_complexity().add_oper_count > p->get_max_arith_expr_add_complexity() ||
+            ret->get_raw_complexity().mul_oper_count > p->get_max_arith_expr_mul_complexity()) {
+            ret = ConstExpr::generate(new_ctx);
+        }
+    }
     return ret;
 }
 
@@ -1175,14 +1244,16 @@ UB BinaryExpr::propagate_value () {
 
 /*
     std::cout << "Before prop:" << std::endl;
-    std::cout << arg0->emit() << std::endl;
+    arg0->emit(std::cout);
+    std::cout << std::endl;
     std::cout << "lhs: " << std::static_pointer_cast<ScalarVariable>(arg0->get_value())->get_cur_value() << std::endl;
-    std::cout << "lhs val id: " << std::static_pointer_cast<ScalarVariable>(arg0->get_value())->get_cur_value().get_int_type_id() << std::endl;
-    std::cout << "lhs id: " << arg0->get_value()->get_type()->get_int_type_id() << std::endl;
-    std::cout << arg1->emit() << std::endl;
+//    std::cout << "lhs val id: " << std::static_pointer_cast<ScalarVariable>(arg0->get_value())->get_cur_value().get_int_type_id() << std::endl;
+//    std::cout << "lhs id: " << arg0->get_value()->get_type()->get_int_type_id() << std::endl;
+    arg1->emit(std::cout);
+    std::cout << std::endl;
     std::cout << "rhs: " << std::static_pointer_cast<ScalarVariable>(arg1->get_value())->get_cur_value() << std::endl;
-    std::cout << "rhs val id: " << std::static_pointer_cast<ScalarVariable>(arg1->get_value())->get_cur_value().get_int_type_id() << std::endl;
-    std::cout << "rhs id: " << arg1->get_value()->get_type()->get_int_type_id() << std::endl;
+//    std::cout << "rhs val id: " << std::static_pointer_cast<ScalarVariable>(arg1->get_value())->get_cur_value().get_int_type_id() << std::endl;
+//    std::cout << "rhs id: " << arg1->get_value()->get_type()->get_int_type_id() << std::endl;
 */
 
     switch (op) {
@@ -1263,18 +1334,20 @@ UB BinaryExpr::propagate_value () {
         else
             ERROR("unsupported type");
     }
+
 /*
     std::cout << "After prop:" << std::endl;
     std::cout << "lhs: " << std::static_pointer_cast<ScalarVariable>(arg0->get_value())->get_cur_value() << std::endl;
-    std::cout << "lhs id: " << arg0->get_value()->get_type()->get_int_type_id() << std::endl;
+//    std::cout << "lhs id: " << arg0->get_value()->get_type()->get_int_type_id() << std::endl;
     std::cout << "rhs: " << std::static_pointer_cast<ScalarVariable>(arg1->get_value())->get_cur_value() << std::endl;
-    std::cout << "rhs id: " << arg1->get_value()->get_type()->get_int_type_id() << std::endl;
+//    std::cout << "rhs id: " << arg1->get_value()->get_type()->get_int_type_id() << std::endl;
     std::cout << "new_val: " << new_val << std::endl;
-    std::cout << "new id: " << new_val.get_int_type_id() << std::endl;
+//    std::cout << "new id: " << new_val.get_int_type_id() << std::endl;
     std::cout << "UB: " << new_val.get_ub() << std::endl;
     std::cout << "ret: " << std::static_pointer_cast<ScalarVariable>(value)->get_cur_value() << std::endl;
     std::cout << "=============" << std::endl;
 */
+
     return new_val.get_ub();
 }
 
@@ -1390,6 +1463,23 @@ UB ConditionalExpr::propagate_value() {
         ERROR("unsupported type");
 
     std::static_pointer_cast<ScalarVariable>(value)->set_cur_value(new_val);
+
+/*
+    std::cout << "Tern prop:" << std::endl;
+    condition->emit(std::cout);
+    std::cout << std::endl;
+    std::cout << "cond: " << std::static_pointer_cast<ScalarVariable>(condition->get_value())->get_cur_value() << std::endl;
+    arg0->emit(std::cout);
+    std::cout << std::endl;
+    std::cout << "lhs: " << std::static_pointer_cast<ScalarVariable>(arg0->get_value())->get_cur_value() << std::endl;
+    arg1->emit(std::cout);
+    std::cout << std::endl;
+    std::cout << "rhs: " << std::static_pointer_cast<ScalarVariable>(arg1->get_value())->get_cur_value() << std::endl;
+    std::cout << "new_val: " << new_val << std::endl;
+    std::cout << "UB: " << new_val.get_ub() << std::endl;
+    std::cout << "ret: " << std::static_pointer_cast<ScalarVariable>(value)->get_cur_value() << std::endl;
+    std::cout << "=============" << std::endl;
+*/
 
     return UB::NoUB;
 }

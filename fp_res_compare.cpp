@@ -61,8 +61,12 @@ std::vector<std::string> check_if_all_has_finished(std::vector<TestResult> &test
 }
 
 bool are_results_equal(TestResult &result1, TestResult &result2) {
-    return std::signbit(result1.result) == std::signbit(result2.result) &&
-           std::abs(std::abs(result1.result / result2.result) - 1) < 0.01;
+    if (std::signbit(result1.result) != std::signbit(result2.result))
+        return false;
+    if (std::abs(result1.result < 0.05) || std::abs(result2.result < 0.05))
+        return (std::abs(result1.result) - std::abs(result2.result)) < 0.01;
+    else
+        return std::abs(std::abs(result1.result / result2.result) - 1) < 0.01;
 }
 
 void print_results(std::vector<TestResult>& test_results, std::vector<std::string> also_failed = std::vector<std::string>()) {

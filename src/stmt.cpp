@@ -48,6 +48,39 @@ DeclStmt::DeclStmt (std::shared_ptr<Data> _data, std::shared_ptr<Expr> _init, bo
     std::shared_ptr<TypeCastExpr> cast_type = std::make_shared<TypeCastExpr>(init, data_var->get_type());
     data_var->set_init_value(std::static_pointer_cast<ScalarVariable>(cast_type->get_value())->get_cur_value());
     data_var->get_raw_complexity() = cast_type->get_raw_complexity();
+    init = cast_type;
+}
+
+// Auxiliary function. We can't convert float, which was obtained as a result of computation, to int.
+std::shared_ptr<Expr> elim_float_to_int_conv (std::shared_ptr<Context> ctx,
+                                              std::shared_ptr<Expr> old_expr,
+                                              std::vector<std::shared_ptr<Expr>> inp) {
+    if (old_expr->get_raw_complexity().add_oper_count == 0 && old_expr->get_raw_complexity().mul_oper_count == 0)
+        return old_expr;
+
+    GenPolicy new_gen_policy = *(ctx->get_gen_policy());
+    new_gen_policy.set_chosen_num_mode(Options::NumMode::INT);
+    std::vector<std::shared_ptr<Expr>> new_cse;
+    for (const auto& i : new_gen_policy.get_cse())
+        new_cse.push_back(i);
+    new_gen_policy.clear_cse();
+    auto cse_cmp_func = [] (auto &vec_elem) -> bool {
+        return std::static_pointer_cast<ScalarVariable>(vec_elem->get_value())->get_cur_value().is_fp_type();
+    };
+    new_cse.erase(std::remove_if(new_cse.begin(), new_cse.end(), cse_cmp_func), new_cse.end());
+    for (const auto& i : new_cse)
+        new_gen_policy.add_cse(i);
+
+    std::shared_ptr<Context> new_ctx = std::make_shared<Context>(*(ctx));
+    new_ctx->set_gen_policy(new_gen_policy);
+
+    std::vector<std::shared_ptr<Expr>> new_inp = inp;
+    auto inp_cmp_func = [] (auto &vec_elem) -> bool {
+        return vec_elem->get_value()->get_type()->is_fp_type();
+    };
+    new_inp.erase(std::remove_if(new_inp.begin(), new_inp.end(), inp_cmp_func), new_inp.end());
+
+    return ArithExpr::generate(new_ctx, new_inp);
 }
 
 // This function randomly creates new ScalarVariable, its initializing arithmetic expression and
@@ -60,6 +93,9 @@ std::shared_ptr<DeclStmt> DeclStmt::generate (std::shared_ptr<Context> ctx,
 
     std::shared_ptr<ScalarVariable> new_var = ScalarVariable::generate(ctx);
     std::shared_ptr<Expr> new_init = ArithExpr::generate(ctx, inp);
+    if (options->is_mix_mode() && new_var->get_type()->is_int_type() &&
+        new_init->get_value()->get_type()->is_fp_type())
+        new_init = elim_float_to_int_conv(ctx, new_init, inp);
     if (count_up_total)
         Expr::increase_expr_count(new_init->get_full_complexity());
     std::shared_ptr<DeclStmt> ret =  std::make_shared<DeclStmt>(new_var, new_init);
@@ -373,6 +409,9 @@ std::shared_ptr<ExprStmt> ExprStmt::generate (std::shared_ptr<Context> ctx,
 
     //TODO: now it can be only assign. Do we want something more?
     std::shared_ptr<Expr> from = ArithExpr::generate(ctx, inp);
+    if (options->is_mix_mode() && out->get_value()->get_type()->is_int_type() &&
+        from->get_value()->get_type()->is_fp_type())
+        from = elim_float_to_int_conv(ctx, from, inp);
     std::shared_ptr<AssignExpr> assign_exp = std::make_shared<AssignExpr>(out, from, ctx->get_taken());
     if (count_up_total)
         Expr::increase_expr_count(assign_exp->get_full_complexity());

@@ -181,18 +181,19 @@ std::shared_ptr<StructType> StructType::generate (std::shared_ptr<Context> ctx,
         primary_static_spec = rand_val_gen->get_rand_value(false, true);
 
     std::shared_ptr<Type> primary_type;
-    if (options->is_int_mode()) {
+    Options::NumMode num_mode = p->get_chosen_num_mode();
+    if (num_mode == Options::NumMode::MIX)
+        num_mode = (Options::NumMode) rand_val_gen->get_rand_id(p->get_int_over_fp_prob());
+    if (num_mode == Options::NumMode::INT) {
         IntegerType::IntegerTypeID int_type_id = rand_val_gen->get_rand_id(p->get_allowed_int_types());
         //TODO: what about align?
         primary_type = IntegerType::init(int_type_id, primary_cv_qual, primary_static_spec, 0);
     }
-    else if (options->is_fp_mode()) {
+    else {
         FPType::FPTypeID fp_type_id = rand_val_gen->get_rand_id(p->get_allowed_fp_types());
         //TODO: what about align?
         primary_type = FPType::init(fp_type_id, primary_cv_qual, primary_static_spec, 0);
     }
-    else
-        ERROR("unsupported type");
 
     NameHandler& name_handler = NameHandler::get_instance();
     std::shared_ptr<StructType> struct_type = std::make_shared<StructType>(name_handler.get_struct_type_name());
@@ -221,8 +222,8 @@ std::shared_ptr<StructType> StructType::generate (std::shared_ptr<Context> ctx,
                 GenPolicy::BitFieldID bit_field_dis = rand_val_gen->get_rand_id(p->get_bit_field_prob());
                 // In C, bit-field may be declared with a type other than unsigned int or signed int
                 // only with "J.5.8 Extended bit-field types"
-                bit_field_dis = (options->is_fp_mode()) ? GenPolicy::BitFieldID::MAX_BIT_FIELD_ID :
-                                bit_field_dis;
+                bit_field_dis = (p->get_chosen_num_mode() == Options::NumMode::FP) ?
+                                GenPolicy::BitFieldID::MAX_BIT_FIELD_ID : bit_field_dis;
                 if (options->is_c()) {
                     auto search_allowed_bit_filed_type = [] (Probability<IntegerType::IntegerTypeID> prob) {
                         return prob.get_id() == IntegerType::IntegerTypeID::INT ||
@@ -243,12 +244,10 @@ std::shared_ptr<StructType> StructType::generate (std::shared_ptr<Context> ctx,
                     primary_static_spec = false; // BitField can't be static member of struct
                 }
                 else
-                    if (options->is_int_mode())
+                    if (num_mode == Options::NumMode::INT)
                         primary_type = IntegerType::generate(ctx);
-                    else if (options->is_fp_mode())
-                        primary_type = FPType::generate(ctx);
                     else
-                        ERROR("unsupported type");
+                        primary_type = FPType::generate(ctx);
             }
         }
         primary_type->set_cv_qual(primary_cv_qual);
@@ -335,7 +334,7 @@ else if (is_fp_type()) {                                                \
             new_val_memb = val.double_val;                              \
             break;                                                      \
         case Type::FPTypeID::LONG_DOUBLE:                               \
-            new_val_memb = val.double_val;                              \
+            new_val_memb = val.long_double_val;                         \
             break;                                                      \
         case Type::FPTypeID::MAX_FP_ID:                                 \
             ERROR("unsupported fp type (BuiltinType::ScalarTypedVal)"); \
@@ -1197,51 +1196,66 @@ BuiltinType::ScalarTypedVal BuiltinType::ScalarTypedVal::operator% (ScalarTypedV
 #define ScalarTypedValCmpOp(__op__)                                                                 \
 BuiltinType::ScalarTypedVal BuiltinType::ScalarTypedVal::operator __op__ (ScalarTypedVal rhs) {     \
     BuiltinType::ScalarTypedVal ret = BuiltinType::ScalarTypedVal(Type::IntegerTypeID::BOOL);       \
-    if (is_fp_type())                                                                               \
-        ERROR("unsupported operator for fp type (BuiltinType::ScalarTypedVal)");                    \
-                                                                                                    \
-    switch (int_type_id) {                                                                          \
-        case IntegerType::IntegerTypeID::BOOL:                                                      \
-            ret.val.bool_val = val.bool_val __op__ rhs.val.bool_val;                                \
-            break;                                                                                  \
-        case IntegerType::IntegerTypeID::CHAR:                                                      \
-            ret.val.bool_val = val.char_val __op__ rhs.val.char_val;                                \
-            break;                                                                                  \
-        case IntegerType::IntegerTypeID::UCHAR:                                                     \
-            ret.val.bool_val = val.uchar_val __op__ rhs.val.uchar_val;                              \
-            break;                                                                                  \
-        case IntegerType::IntegerTypeID::SHRT:                                                      \
-            ret.val.bool_val = val.shrt_val __op__ rhs.val.shrt_val;                                \
-            break;                                                                                  \
-        case IntegerType::IntegerTypeID::USHRT:                                                     \
-            ret.val.bool_val = val.ushrt_val __op__ rhs.val.ushrt_val;                              \
-            break;                                                                                  \
-        case IntegerType::IntegerTypeID::INT:                                                       \
-            ret.val.bool_val = val.int_val __op__ rhs.val.int_val;                                  \
-            break;                                                                                  \
-        case IntegerType::IntegerTypeID::UINT:                                                      \
-            ret.val.bool_val = val.uint_val __op__ rhs.val.uint_val;                                \
-            break;                                                                                  \
-        case IntegerType::IntegerTypeID::LINT:                                                      \
-            if (options->mode_64bit)                                                                \
-                ret.val.bool_val = val.lint64_val __op__ rhs.val.lint64_val;                        \
-            else                                                                                    \
-                ret.val.bool_val = val.lint32_val __op__ rhs.val.lint32_val;                        \
-            break;                                                                                  \
-        case IntegerType::IntegerTypeID::ULINT:                                                     \
-            if (options->mode_64bit)                                                                \
-                ret.val.bool_val = val.ulint64_val __op__ rhs.val.ulint64_val;                      \
-            else                                                                                    \
-                ret.val.bool_val = val.ulint32_val __op__ rhs.val.ulint32_val;                      \
-            break;                                                                                  \
-        case IntegerType::IntegerTypeID::LLINT:                                                     \
-            ret.val.bool_val = val.llint_val __op__ rhs.val.llint_val;                              \
-            break;                                                                                  \
-        case IntegerType::IntegerTypeID::ULLINT:                                                    \
-            ret.val.bool_val = val.ullint_val __op__ rhs.val.ullint_val;                            \
-            break;                                                                                  \
-        case IntegerType::IntegerTypeID::MAX_INT_ID:                                                \
-            ERROR("perform propagate_type (BuiltinType::ScalarTypedVal)");                          \
+    if (is_int_type()) {                                                                            \
+        switch (int_type_id) {                                                                      \
+            case IntegerType::IntegerTypeID::BOOL:                                                  \
+                ret.val.bool_val = val.bool_val __op__ rhs.val.bool_val;                            \
+                break;                                                                              \
+            case IntegerType::IntegerTypeID::CHAR:                                                  \
+                ret.val.bool_val = val.char_val __op__ rhs.val.char_val;                            \
+                break;                                                                              \
+            case IntegerType::IntegerTypeID::UCHAR:                                                 \
+                ret.val.bool_val = val.uchar_val __op__ rhs.val.uchar_val;                          \
+                break;                                                                              \
+            case IntegerType::IntegerTypeID::SHRT:                                                  \
+                ret.val.bool_val = val.shrt_val __op__ rhs.val.shrt_val;                            \
+                break;                                                                              \
+            case IntegerType::IntegerTypeID::USHRT:                                                 \
+                ret.val.bool_val = val.ushrt_val __op__ rhs.val.ushrt_val;                          \
+                break;                                                                              \
+            case IntegerType::IntegerTypeID::INT:                                                   \
+                ret.val.bool_val = val.int_val __op__ rhs.val.int_val;                              \
+                break;                                                                              \
+            case IntegerType::IntegerTypeID::UINT:                                                  \
+                ret.val.bool_val = val.uint_val __op__ rhs.val.uint_val;                            \
+                break;                                                                              \
+            case IntegerType::IntegerTypeID::LINT:                                                  \
+                if (options->mode_64bit)                                                            \
+                    ret.val.bool_val = val.lint64_val __op__ rhs.val.lint64_val;                    \
+                else                                                                                \
+                    ret.val.bool_val = val.lint32_val __op__ rhs.val.lint32_val;                    \
+                break;                                                                              \
+            case IntegerType::IntegerTypeID::ULINT:                                                 \
+                if (options->mode_64bit)                                                            \
+                    ret.val.bool_val = val.ulint64_val __op__ rhs.val.ulint64_val;                  \
+                else                                                                                \
+                    ret.val.bool_val = val.ulint32_val __op__ rhs.val.ulint32_val;                  \
+                break;                                                                              \
+            case IntegerType::IntegerTypeID::LLINT:                                                 \
+                ret.val.bool_val = val.llint_val __op__ rhs.val.llint_val;                          \
+                break;                                                                              \
+            case IntegerType::IntegerTypeID::ULLINT:                                                \
+                ret.val.bool_val = val.ullint_val __op__ rhs.val.ullint_val;                        \
+                break;                                                                              \
+            case IntegerType::IntegerTypeID::MAX_INT_ID:                                            \
+                ERROR("perform propagate_type (BuiltinType::ScalarTypedVal)");                      \
+        }                                                                                           \
+    }                                                                                               \
+    /*//TODO: it won't work for == and !=*/                                                         \
+    if (is_fp_type()) {                                                                             \
+        switch (fp_type_id) {                                                                       \
+            case FPType::FPTypeID::FLOAT:                                                           \
+                ret.val.bool_val = val.float_val __op__ rhs.val.float_val;                          \
+                break;                                                                              \
+            case FPType::FPTypeID::DOUBLE:                                                          \
+                ret.val.bool_val = val.double_val __op__ rhs.val.double_val;                        \
+                break;                                                                              \
+            case FPType::FPTypeID::LONG_DOUBLE:                                                     \
+                ret.val.bool_val = val.long_double_val __op__ rhs.val.long_double_val;              \
+                break;                                                                              \
+            case FPType::FPTypeID::MAX_FP_ID:                                                       \
+                ERROR("perform propagate_type (BuiltinType::ScalarTypedVal)");                      \
+        }                                                                                           \
     }                                                                                               \
     return ret;                                                                                     \
 }
@@ -2454,12 +2468,14 @@ std::shared_ptr<ArrayType> ArrayType::generate(std::shared_ptr<Context> ctx) {
     Type::TypeID base_type_id = rand_val_gen->get_rand_id(p->get_array_base_type_prob());
     std::shared_ptr<Type> base_type;
     if (base_type_id == TypeID::BUILTIN_TYPE || ctx->get_extern_inp_sym_table()->get_struct_types().size() == 0) {
-        if (options->is_int_mode())
+        Options::NumMode num_mode = p->get_chosen_num_mode();
+        if (num_mode == Options::NumMode::MIX)
+            num_mode = (Options::NumMode) rand_val_gen->get_rand_id(p->get_int_over_fp_prob());
+
+        if (num_mode == Options::NumMode::INT)
             base_type = IntegerType::generate(ctx);
-        else if (options->is_fp_mode())
-            base_type = FPType::generate(ctx);
         else
-            ERROR("unsupported type");
+            base_type = FPType::generate(ctx);
     }
     else if (base_type_id == TypeID::STRUCT_TYPE) {
         uint32_t struct_type_idx = rand_val_gen->get_rand_value(

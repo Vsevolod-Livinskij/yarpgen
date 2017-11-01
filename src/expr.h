@@ -135,8 +135,10 @@ class ConstExpr : public Expr {
         static void fill_const_buf(std::shared_ptr<Context> ctx);
 
     private:
-        // Buffer for constants, used in arithmetic context
-        static std::vector<BuiltinType::ScalarTypedVal> arith_const_buffer;
+        // Buffer for integer constants, used in arithmetic context
+        static std::vector<BuiltinType::ScalarTypedVal> int_arith_const_buffer;
+        // Buffer for FP constants, used in arithmetic context
+        static std::vector<BuiltinType::ScalarTypedVal> fp_arith_const_buffer;
         // Buffer for constants, used in bit-logical context
         static std::vector<BuiltinType::ScalarTypedVal> bit_log_const_buffer;
 
