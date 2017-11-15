@@ -723,46 +723,11 @@ std::shared_ptr<Expr> ArithExpr::gen_level (std::shared_ptr<Context> ctx, std::v
         ERROR("inappropriate node type (ArithExpr)");
 //    std::cout << ret->emit() << std::endl;
     if ((p->get_chosen_num_mode() == Options::NumMode::FP ||
-         p->get_chosen_num_mode() == Options::NumMode::MIX)) {
-        BuiltinType::ScalarTypedVal tmp_ret_val = std::static_pointer_cast<ScalarVariable>(ret->get_value())->get_cur_value();
-        if (tmp_ret_val.is_fp_type()) {
-            // Sometimes FP values exceed our artificial limits, so we have to force them to be under limits
+         p->get_chosen_num_mode() == Options::NumMode::MIX) &&
+        (ret->get_raw_complexity().add_oper_count > p->get_max_arith_expr_add_complexity() ||
+         ret->get_raw_complexity().mul_oper_count > p->get_max_arith_expr_mul_complexity()))
+        ret = ConstExpr::generate(new_ctx);
 
-            // Auxiliary function, which sets FP values and converts them to desired type
-            auto set_corr_fp_value = [&tmp_ret_val] (BuiltinType::ScalarTypedVal& limit_val, float val) {
-                limit_val.val.float_val = val;
-                limit_val = limit_val.cast_type(tmp_ret_val.get_fp_type_id());
-            };
-
-            BuiltinType::ScalarTypedVal min_fp = BuiltinType::ScalarTypedVal(FPType::FPTypeID::FLOAT);
-            set_corr_fp_value(min_fp, p->get_fp_min_limit());
-            BuiltinType::ScalarTypedVal max_fp = BuiltinType::ScalarTypedVal(FPType::FPTypeID::FLOAT);
-            set_corr_fp_value(max_fp, p->get_fp_max_limit());
-            BuiltinType::ScalarTypedVal zero_fp = BuiltinType::ScalarTypedVal(FPType::FPTypeID::FLOAT);
-            set_corr_fp_value(max_fp, 0.0);
-
-            // Main correction function
-            auto apply_fp_correction = [&ret, &tmp_ret_val, &p, &set_corr_fp_value] (bool is_under_min) {
-                BuiltinType::ScalarTypedVal fp_mul = BuiltinType::ScalarTypedVal(FPType::FPTypeID::FLOAT);
-                set_corr_fp_value(fp_mul, rand_val_gen->get_rand_value(p->get_fp_mul_min(), p->get_fp_mul_max()));
-                fp_mul = fp_mul * tmp_ret_val;
-                std::shared_ptr<ConstExpr> fp_const = std::make_shared<ConstExpr>(fp_mul);
-                if (is_under_min)
-                    ret = std::make_shared<BinaryExpr>(BinaryExpr::Op::Div, fp_const, ret);
-                else
-                    ret = std::make_shared<BinaryExpr>(BinaryExpr::Op::Div, ret, fp_const);
-            };
-
-            if ((zero_fp < tmp_ret_val).val.bool_val && (tmp_ret_val < min_fp).val.bool_val)
-                apply_fp_correction(true);
-            else if ((tmp_ret_val > max_fp).val.bool_val)
-                apply_fp_correction(false);
-        }
-        if (ret->get_raw_complexity().add_oper_count > p->get_max_arith_expr_add_complexity() ||
-            ret->get_raw_complexity().mul_oper_count > p->get_max_arith_expr_mul_complexity()) {
-            ret = ConstExpr::generate(new_ctx);
-        }
-    }
     return ret;
 }
 

@@ -51,31 +51,44 @@ DeclStmt::DeclStmt (std::shared_ptr<Data> _data, std::shared_ptr<Expr> _init, bo
     init = cast_type;
 }
 
+// Auxiliary function. Sometimes FP doesn't fit to integral variables
+bool if_fp_fit_to_int (IntegerType::IntegerTypeID int_type_id, BuiltinType::ScalarTypedVal fp_val) {
+    std::shared_ptr<IntegerType> tmp_int_type = IntegerType::init(int_type_id);
+
+    BuiltinType::ScalarTypedVal min_int_to_fp = tmp_int_type->get_min().cast_type(fp_val.get_fp_type_id());
+    BuiltinType::ScalarTypedVal max_int_to_fp = tmp_int_type->get_max().cast_type(fp_val.get_fp_type_id());
+
+    return (fp_val < min_int_to_fp).val.bool_val || (fp_val > max_int_to_fp).val.bool_val;
+}
+
 // Auxiliary function. We can't convert float, which was obtained as a result of computation, to int.
-std::shared_ptr<Expr> elim_float_to_int_conv (std::shared_ptr<Context> ctx,
-                                              std::shared_ptr<Expr> old_expr,
-                                              std::vector<std::shared_ptr<Expr>> inp) {
-    if (old_expr->get_raw_complexity().add_oper_count == 0 && old_expr->get_raw_complexity().mul_oper_count == 0)
+std::shared_ptr<Expr> fix_fp_to_int_conv(std::shared_ptr<Context> ctx,
+                                         std::shared_ptr<Expr> old_expr,
+                                         std::vector<std::shared_ptr<Expr>> inp,
+                                         bool force_fix) {
+    if (old_expr->get_raw_complexity().add_oper_count == 0 && old_expr->get_raw_complexity().mul_oper_count == 0 &&
+        !std::static_pointer_cast<ScalarVariable>(old_expr->get_value())->get_cur_value().is_too_close_to_int() &&
+        !force_fix)
         return old_expr;
 
     GenPolicy new_gen_policy = *(ctx->get_gen_policy());
     new_gen_policy.set_chosen_num_mode(Options::NumMode::INT);
     std::vector<std::shared_ptr<Expr>> new_cse;
-    for (const auto& i : new_gen_policy.get_cse())
+    for (const auto &i : new_gen_policy.get_cse())
         new_cse.push_back(i);
     new_gen_policy.clear_cse();
-    auto cse_cmp_func = [] (auto &vec_elem) -> bool {
+    auto cse_cmp_func = [](auto &vec_elem) -> bool {
         return std::static_pointer_cast<ScalarVariable>(vec_elem->get_value())->get_cur_value().is_fp_type();
     };
     new_cse.erase(std::remove_if(new_cse.begin(), new_cse.end(), cse_cmp_func), new_cse.end());
-    for (const auto& i : new_cse)
+    for (const auto &i : new_cse)
         new_gen_policy.add_cse(i);
 
     std::shared_ptr<Context> new_ctx = std::make_shared<Context>(*(ctx));
     new_ctx->set_gen_policy(new_gen_policy);
 
     std::vector<std::shared_ptr<Expr>> new_inp = inp;
-    auto inp_cmp_func = [] (auto &vec_elem) -> bool {
+    auto inp_cmp_func = [](auto &vec_elem) -> bool {
         return vec_elem->get_value()->get_type()->is_fp_type();
     };
     new_inp.erase(std::remove_if(new_inp.begin(), new_inp.end(), inp_cmp_func), new_inp.end());
@@ -94,8 +107,11 @@ std::shared_ptr<DeclStmt> DeclStmt::generate (std::shared_ptr<Context> ctx,
     std::shared_ptr<ScalarVariable> new_var = ScalarVariable::generate(ctx);
     std::shared_ptr<Expr> new_init = ArithExpr::generate(ctx, inp);
     if (options->is_mix_mode() && new_var->get_type()->is_int_type() &&
-        new_init->get_value()->get_type()->is_fp_type())
-        new_init = elim_float_to_int_conv(ctx, new_init, inp);
+        new_init->get_value()->get_type()->is_fp_type()) {
+        bool force_fix = if_fp_fit_to_int(new_var->get_type()->get_int_type_id(),
+                                          std::static_pointer_cast<ScalarVariable>(new_init->get_value())->get_cur_value());
+        new_init = fix_fp_to_int_conv(ctx, new_init, inp, force_fix);
+    }
     if (count_up_total)
         Expr::increase_expr_count(new_init->get_full_complexity());
     std::shared_ptr<DeclStmt> ret =  std::make_shared<DeclStmt>(new_var, new_init);
@@ -410,8 +426,11 @@ std::shared_ptr<ExprStmt> ExprStmt::generate (std::shared_ptr<Context> ctx,
     //TODO: now it can be only assign. Do we want something more?
     std::shared_ptr<Expr> from = ArithExpr::generate(ctx, inp);
     if (options->is_mix_mode() && out->get_value()->get_type()->is_int_type() &&
-        from->get_value()->get_type()->is_fp_type())
-        from = elim_float_to_int_conv(ctx, from, inp);
+        from->get_value()->get_type()->is_fp_type()) {
+        bool force_fix = if_fp_fit_to_int(out->get_value()->get_type()->get_int_type_id(),
+                                          std::static_pointer_cast<ScalarVariable>(from->get_value())->get_cur_value());
+        from = fix_fp_to_int_conv(ctx, from, inp, force_fix);
+    }
     std::shared_ptr<AssignExpr> assign_exp = std::make_shared<AssignExpr>(out, from, ctx->get_taken());
     if (count_up_total)
         Expr::increase_expr_count(assign_exp->get_full_complexity());

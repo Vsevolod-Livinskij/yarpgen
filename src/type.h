@@ -228,6 +228,7 @@ class BuiltinType : public Type {
                 Type::IntegerTypeID get_int_type_id () const { return int_type_id; }
                 bool is_fp_type () const { return fp_type_id != FPTypeID::MAX_FP_ID; }
                 Type::FPTypeID get_fp_type_id () const { return fp_type_id; }
+                bool is_too_close_to_int();
 
                 // Utility functions for UB
                 UB get_ub () { return res_of_ub; }

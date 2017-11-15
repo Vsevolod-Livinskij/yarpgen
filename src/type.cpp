@@ -278,6 +278,31 @@ BuiltinType::ScalarTypedVal::ScalarTypedVal (BuiltinType::FPTypeID _fp_type_id, 
     val.long_double_val = 0.0L;
 }
 
+bool BuiltinType::ScalarTypedVal::is_too_close_to_int() {
+    if (is_int_type())
+        return false;
+
+    auto cmp_func = [] (auto val) -> bool {
+        double fractpart, intpart;
+        fractpart = modf (val , &intpart);
+        //TODO: add epsilon to gen_policy or options
+        return std::abs(fractpart) <= 0.0001;
+    };
+
+    switch (fp_type_id) {
+        case FPTypeID::FLOAT:
+            return cmp_func(val.float_val);
+        case FPTypeID::DOUBLE:
+            return cmp_func(val.double_val);
+        case FPTypeID::LONG_DOUBLE:
+            return cmp_func(val.long_double_val);
+        case FPTypeID::MAX_FP_ID:
+            ERROR("Bad FPTypeID");
+    }
+    return false;
+}
+
+
 //TODO: maybe we can use template instead of it?
 #define CAST_CASE(new_val_memb)                                         \
 if (is_int_type()) {                                                    \
