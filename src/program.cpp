@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "program.h"
 #include "util.h"
+#include "cfg_gen.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -47,7 +48,14 @@ void Program::generate () {
         ctx.set_extern_out_sym_table(extern_out_sym_table.back());
         std::shared_ptr<Context> ctx_ptr = std::make_shared<Context>(ctx);
         form_extern_sym_table(ctx_ptr);
-        functions.push_back(ScopeStmt::generate(ctx_ptr));
+        BasicBlock top_bb = BasicBlock(10, 0);
+        top_bb.split_block();
+        std::vector<std::shared_ptr<Stmt>> stmts = top_bb.fill_with_stmts(ctx_ptr);
+        ScopeStmt scope;
+        for (auto const& j : stmts)
+            scope.add_stmt(j);
+        functions.push_back(std::make_shared<ScopeStmt>(scope));
+//        functions.push_back(ScopeStmt::generate(ctx_ptr));
 
         name_handler.zero_out_counters();
         Stmt::zero_out_func_stmt_count();

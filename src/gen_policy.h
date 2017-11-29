@@ -428,6 +428,8 @@ class GenPolicy {
         void set_max_if_depth (uint32_t _max_if_depth) { max_if_depth = _max_if_depth; }
         uint32_t get_max_if_depth () { return max_if_depth; }
         std::vector<Probability<GenPolicy::DeclStmtGenID>>& get_decl_stmt_gen_id_prob() { return decl_stmt_gen_id_prob; }
+
+        std::vector<Probability<bool>>& get_split_block_prob () { return split_block_prob; }
         ///////////////////////////////////////////////////////////////////////
 
     private:
@@ -543,6 +545,7 @@ class GenPolicy {
         std::vector<Probability<bool>> else_prob;
         uint32_t max_if_depth;
         std::vector<Probability<GenPolicy::DeclStmtGenID>> decl_stmt_gen_id_prob;
+        std::vector<Probability<bool>> split_block_prob;
 };
 
 extern GenPolicy default_gen_policy;

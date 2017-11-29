@@ -242,9 +242,13 @@ void GenPolicy::init_from_config () {
     stmt_gen_prob.push_back (decl_gen);
     Probability<Node::NodeID> assign_gen (Node::NodeID::EXPR, 10);
     stmt_gen_prob.push_back (assign_gen);
-    Probability<Node::NodeID> if_gen (Node::NodeID::IF, 10);
-    stmt_gen_prob.push_back (if_gen);
+//    Probability<Node::NodeID> if_gen (Node::NodeID::IF, 10);
+//    stmt_gen_prob.push_back (if_gen);
     rand_val_gen->shuffle_prob(stmt_gen_prob);
+
+    split_block_prob.emplace_back(Probability<bool>(true, 50));
+    split_block_prob.emplace_back(Probability<bool>(false, 50));
+    rand_val_gen->shuffle_prob(split_block_prob);
 
     Probability<ArithLeafID> data_leaf (ArithLeafID::Data, 11);
     arith_leaves.push_back (data_leaf);

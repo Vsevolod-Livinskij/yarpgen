@@ -93,16 +93,18 @@ class ScopeStmt : public Stmt {
     public:
         ScopeStmt () : Stmt(Node::NodeID::SCOPE) {}
         void add_stmt (std::shared_ptr<Stmt> stmt) { scope.push_back(stmt); }
+        std::vector<std::shared_ptr<Stmt>> get_stmts () { return scope; }
         void emit (std::ostream& stream, std::string offset = "");
         static std::shared_ptr<ScopeStmt> generate (std::shared_ptr<Context> ctx);
+        static std::shared_ptr<ScopeStmt> generate (std::shared_ptr<Context> ctx, uint32_t scope_stmt_count);
 
-    private:
         using ExprVector = std::vector<std::shared_ptr<Expr>>;
         static ExprVector extract_inp_from_ctx(std::shared_ptr<Context> ctx);
         static ExprVector extract_locals_from_ctx(std::shared_ptr<Context> ctx);
         static ExprVector extract_inp_and_mix_from_ctx(std::shared_ptr<Context> ctx);
         static std::map<std::string, ExprVector> extract_all_local_ptr_exprs(std::shared_ptr<Context> ctx);
 
+    private:
         std::vector<std::shared_ptr<Stmt>> scope;
 };
 

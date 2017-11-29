@@ -229,8 +229,14 @@ static std::shared_ptr<ExprStar> deep_deref_expr_from_nest_ptr(std::shared_ptr<E
 
 // One of the most important generation methods (top-level generator for everything between curve brackets).
 // It acts as a top-level dispatcher for other statement generation functions.
-// Also it initially fills extern symbol table.
 std::shared_ptr<ScopeStmt> ScopeStmt::generate (std::shared_ptr<Context> ctx) {
+    auto p = ctx->get_gen_policy();
+    uint32_t scope_stmt_count = rand_val_gen->get_rand_value(p->get_min_scope_stmt_count(),
+                                                             p->get_max_scope_stmt_count());
+    return generate(ctx, scope_stmt_count);
+}
+
+std::shared_ptr<ScopeStmt> ScopeStmt::generate (std::shared_ptr<Context> ctx, uint32_t scope_stmt_count) {
     GenPolicy::add_to_complexity(Node::NodeID::SCOPE);
 
     std::shared_ptr<ScopeStmt> ret = std::make_shared<ScopeStmt>();
@@ -240,8 +246,6 @@ std::shared_ptr<ScopeStmt> ScopeStmt::generate (std::shared_ptr<Context> ctx) {
 
     //TODO: add to gen_policy stmt number
     auto p = ctx->get_gen_policy();
-    uint32_t scope_stmt_count = rand_val_gen->get_rand_value(p->get_min_scope_stmt_count(),
-                                                             p->get_max_scope_stmt_count());
 
     for (uint32_t i = 0; i < scope_stmt_count; ++i) {
         if (Stmt::total_stmt_count >= p->get_max_total_stmt_count() ||
