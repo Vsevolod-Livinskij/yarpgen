@@ -67,7 +67,8 @@ gcc_opt          | gcc       | -O3       |                |
 #gcc_skx_opt      | gcc       | -O3       | skylake-avx512 | skx
 
 clang_no_opt     | clang     | -O0       |                |
-clang_opt        | clang     | -O3       |                |
+clang_opt        | clang     | -O3 -g -mllvm -enable-newgvn -enable-npm-gvn-hoist -enable-npm-gvn-sink -enable-npm-newgvn -use-cfl-aa -use-cfl-aa-in-codegen      |                |
+clang_opt_size    | clang     | -Os -mllvm -branch-fold-placement       |                |
 #clang_knl_no_opt | clang     | -O0       | knl            | knl
 #clang_knl_opt    | clang     | -O3       | knl            | knl
 #clang_skx_no_opt | clang     | -O0       | skx            | skx
