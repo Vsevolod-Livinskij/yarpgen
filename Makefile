@@ -1,6 +1,6 @@
 ###############################################################################
 #
-# Copyright (c) 2015-2017, Intel Corporation
+# Copyright (c) 2015-2018, Intel Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,32 +25,40 @@ else
 endif
 
 CXX=clang++
-CXXFLAGS=-std=c++14 -Wall -Wpedantic -Werror -DBUILD_DATE="\"$(BUILD_DATE)\"" -DBUILD_VERSION="\"$(BUILD_VERSION)\""
+CXXFLAGS=-std=c++14 -Wall -Wpedantic -Werror -MMD -MP -DBUILD_DATE="\"$(BUILD_DATE)\"" -DBUILD_VERSION="\"$(BUILD_VERSION)\"" -Iinclude
 OPT=-O3
 LDFLAGS=-L./ -std=c++14
-LIBSOURCES=type.cpp variable.cpp expr.cpp stmt.cpp gen_policy.cpp sym_table.cpp program.cpp options.cpp
-SOURCES=main.cpp $(LIBSOURCES) self-test.cpp
-LIBSOURCES_SRC=$(addprefix src/, $(LIBSOURCES))
-SOURCES_SRC=$(addprefix src/, $(SOURCES))
-LIBOBJS=$(addprefix objs/, $(LIBSOURCES:.cpp=.o))
-OBJS=$(addprefix objs/, $(SOURCES:.cpp=.o))
-HEADERS=type.h variable.h ir_node.h expr.h stmt.h gen_policy.h sym_table.h program.h options.h
-HEADERS_SRC=$(addprefix src/, $(HEADERS))
+
+OBJ_DIR=objs/
+
+LIBSOURCES=config_parser.cpp options.cpp
+LIBSOURCES_DIR=lib/
+LIBSOURCES_SRC=$(addprefix $(LIBSOURCES_DIR), $(LIBSOURCES))
+LIBOBJS=$(addprefix $(OBJ_DIR), $(LIBSOURCES:.cpp=.o))
+
+SOURCES=main.cpp
+SOURCES_DIR=src/
+SOURCES_SRC=$(addprefix $(SOURCES_DIR), $(SOURCES))
+OBJS=$(addprefix $(OBJ_DIR), $(SOURCES:.cpp=.o))
+
+
+HEADERS=config_parser.hpp json.hpp options.hpp utils.hpp
+HEADERS_DIR=include/
+HEADERS_SRC=$(addprefix $(HEADERS_DIR), $(HEADERS))
+
+DEPS=$(OBJS:.o=.d) $(LIBOBJS:.o=.d)
 EXECUTABLE=yarpgen
 
 default: $(EXECUTABLE)
 
-$(EXECUTABLE): dir $(SOURCES_SRC) $(HEADERS_SRC) $(OBJS) libyarpgen
-	$(CXX) $(OPT) $(LDFLAGS) -o $@ $(OBJS)
-
-libyarpgen: dir $(LIBSOURCES_SRC) $(HEADERS_SRC) $(LIBOBJS)
-	ar rcs $@.a $(LIBOBJS)
+$(EXECUTABLE): dir $(LIBOBJS) $(OBJS) $(LIBSOURCES_SRC) $(SOURCES_SRC) $(HEADERS_SRC)
+	$(CXX) $(OPT) $(LDFLAGS) -o $@ $(OBJS) $(LIBOBJS)
 
 dir:
-	/bin/mkdir -p objs
+	/bin/mkdir -p $(OBJ_DIR)
 
 clean:
-	/bin/rm -rf objs $(EXECUTABLE) libyarpgen.a
+	/bin/rm -rf $(OBJ_DIR) $(EXECUTABLE)
 
 debug: $(EXECUTABLE)
 debug: OPT=-O0 -g
@@ -65,5 +73,11 @@ gcov: $(EXECUTABLE)
 gcov: CXX=g++
 gcov: OPT+=-fprofile-arcs -ftest-coverage -g
 
-objs/%.o: src/%.cpp $(HEADERS_SRC)
+.SECONDEXPANSION:
+$(LIBOBJS): $$(patsubst %.o,$(LIBSOURCES_DIR)%.cpp,$$(@F))
 	$(CXX) $(OPT) $(CXXFLAGS) -o $@ -c $<
+
+$(OBJS): $$(patsubst %.o,$(SOURCES_DIR)%.cpp,$$(@F))
+	$(CXX) $(OPT) $(CXXFLAGS) -o $@ -c $<
+
+-include $(DEPS)

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2015-2017, Intel Corporation
+Copyright (c) 2015-2018, Intel Corporation
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,20 +17,8 @@ limitations under the License.
 //////////////////////////////////////////////////////////////////////////////
 
 #include <cassert>
-#include <cstring>
-#include <cstdint>
-#include <cstdlib>
-#include <functional>
-#include <iostream>
-#include <sstream>
 
-#include "gen_policy.h"
-#include "options.h"
-#include "program.h"
-#include "sym_table.h"
-#include "type.h"
-#include "variable.h"
-#include "util.h"
+#include "options.hpp"
 
 #ifndef BUILD_DATE
 #define BUILD_DATE __DATE__
@@ -43,23 +31,26 @@ limitations under the License.
 using namespace yarpgen;
 
 void printVersion () {
-    std::cout << "yarpgen version " + options->yarpgen_version +
+    GeneratorOptions& generator_options = GeneratorOptions::getInstance();
+    std::cout << "yarpgen version " + generator_options.yarpgen_version +
                  " (build " << BUILD_VERSION << " on " << BUILD_DATE << ")" << std::endl;
 }
 
-extern void self_test();
-
+// This function checks if options start with specified string
 bool option_starts_with (char* option, const char* test) {
     return !strncmp(option, test, strlen(test));
 }
 
 // This function prints out optional error_message, help and exits
-void print_usage_and_exit (std::string error_msg = "") {
+void print_usage_and_exit (const std::string& error_msg = "") {
+    // Print error message
     int exit_code = 0;
-    if (error_msg != "") {
+    if (!error_msg.empty()) {
         std::cerr << error_msg << std::endl;
         exit_code = -1;
     }
+
+    // Print version and help
     std::cout << std::endl;
     printVersion();
     std::cout << "usage: yarpgen\n";
@@ -69,23 +60,35 @@ void print_usage_and_exit (std::string error_msg = "") {
     std::cout << "\t-s, --seed=<seed>         Predefined seed (it is accepted in form of SSS or VV_SSS)\n";
     std::cout << "\t-m, --bit-mode=<32/64>    Generated test's bit mode\n";
     std::cout << "\t--std=<standard>          Generated test's language standard\n";
-    auto search_for_default_std = [] (const std::pair<std::string, Options::StandardID> &pair) {
-        return pair.second == options->standard_id;
+
+    // Print all supported language standards
+    GeneratorOptions& generator_options = GeneratorOptions::getInstance();
+
+    std::cout << "Two:" << static_cast<int>(generator_options.standard_id) << std::endl;
+
+    // Find and print string for selected standard
+    auto search_for_default_std = [&generator_options] (const std::pair<std::string, StandardID> &pair) {
+        return pair.second == generator_options.standard_id;
     };
-    auto search_res = std::find_if(Options::str_to_standard.begin(), Options::str_to_standard.end(), search_for_default_std);
-    assert(search_res != Options::str_to_standard.end() && "Can't match default standard_id and string");
+    auto search_res = std::find_if(GeneratorOptions::str_to_standard.begin(),
+                                   GeneratorOptions::str_to_standard.end(),
+                                   search_for_default_std);
+    assert(search_res != GeneratorOptions::str_to_standard.end() && "Can't match default standard_id and string");
     std::cout << "\t\t\t\t  Default: " << search_res->first << "\n";
-    std::string all_standatds = "\t\t\t\t  Possible variants are:";
-    for (const auto &iter : Options::str_to_standard)
-        all_standatds += " " + iter.first + ",";
-    all_standatds.pop_back();
-    std::cout << all_standatds << std::endl;
+
+    // Handle the rest
+    std::string all_standards = "\t\t\t\t  Possible variants are:";
+    for (const auto &iter : GeneratorOptions::str_to_standard)
+        all_standards += " " + iter.first + ",";
+    all_standards.pop_back();
+    std::cout << all_standards << std::endl;
+
     exit (exit_code);
 }
 
 // This function handles command-line options in form of "-short_arg <value>" and performs action(<value>)
-bool parse_short_args (int argc, int &argv_iter, char** &argv, std::string short_arg,
-                       std::function<void(char*)> action, std::string error_msg) {
+bool parse_short_args (int argc, int &argv_iter, char** &argv, const std::string &short_arg,
+                       const std::function<void(char*)> &action, const std::string &error_msg) {
     if (!strcmp(argv[argv_iter], short_arg.c_str())) {
         if (++argv_iter == argc)
             print_usage_and_exit(error_msg);
@@ -98,8 +101,8 @@ bool parse_short_args (int argc, int &argv_iter, char** &argv, std::string short
 }
 
 // This function handles command-line options in form of "--long_arg=<value>" and performs action(<value>)
-bool parse_long_args (int &argv_iter, char** &argv, std::string long_arg,
-                      std::function<void(char*)> action, std::string error_msg) {
+bool parse_long_args (int &argv_iter, char** &argv, const std::string &long_arg,
+                      const std::function<void(char*)> &action, const std::string &error_msg) {
     if (option_starts_with(argv[argv_iter], (long_arg + "=").c_str())) {
         size_t option_end = strlen((long_arg + "=").c_str());
         if (strlen(argv[argv_iter]) == option_end)
@@ -112,18 +115,22 @@ bool parse_long_args (int &argv_iter, char** &argv, std::string long_arg,
     return false;
 }
 
-bool parse_long_and_short_args (int argc, int &argv_iter, char** &argv, std::string short_arg,
-                                std::string long_arg, std::function<void(char*)> action, std::string error_msg) {
+bool parse_long_and_short_args (int argc, int &argv_iter, char** &argv, const std::string &short_arg,
+                                const std::string &long_arg, const std::function<void(char*)> &action,
+                                const std::string &error_msg) {
     return parse_long_args (      argv_iter, argv, long_arg , action, error_msg) ||
            parse_short_args(argc, argv_iter, argv, short_arg, action, error_msg);
 }
 
+
 int main (int argc, char* argv[128]) {
-    options = new Options;
+    GeneratorOptions& generator_options = GeneratorOptions::getInstance();
+    std::cout << "One:" << static_cast<int>(generator_options.standard_id) << std::endl;
     uint64_t seed = 0;
     std::string out_dir = "./";
     bool quiet = false;
 
+    //TODO: maybe it is better to move all of this functions to separate file?
     // Utility functions. They are necessary for copy-paste reduction. They perform main actions during option parsing.
     // Detects output directory
     auto out_dir_action = [&out_dir] (std::string arg) {
@@ -131,7 +138,8 @@ int main (int argc, char* argv[128]) {
     };
 
     // Detects predefined seed
-    auto seed_action = [&seed] (std::string arg) {
+    auto seed_action = [&seed, &generator_options] (std::string arg) {
+        // Separate seed string to substrings (version and seed itself)
         size_t *pEnd = nullptr;
         std::stringstream arg_ss(arg);
         std::string segment;
@@ -139,10 +147,12 @@ int main (int argc, char* argv[128]) {
         while(std::getline(arg_ss, segment, '_'))
             seed_list.push_back(segment);
 
-        if ((seed_list.size() > 1 && seed_list.at(0) != options->plane_yarpgen_version) ||
+        // Compare version
+        if ((seed_list.size() > 1 && seed_list.at(0) != generator_options.plane_yarpgen_version) ||
             seed_list.size() > 2)
             ERROR("Incompatible yarpgen version in seed: " + arg);
 
+        // Recognize seed
         try {
             seed = std::stoull(seed_list.back(), pEnd, 10);
         }
@@ -152,14 +162,14 @@ int main (int argc, char* argv[128]) {
     };
 
     // Detects YARPGen bit_mode
-    auto bit_mode_action = [] (std::string arg) {
+    auto bit_mode_action = [&generator_options] (std::string arg) {
         size_t *pEnd = nullptr;
         try {
             uint64_t bit_mode_arg = std::stoull(arg, pEnd, 10);
             if (bit_mode_arg == 32)
-                options->mode_64bit = false;
+                generator_options.set64BitMode(false);
             else if (bit_mode_arg == 64)
-                options->mode_64bit = true;
+                generator_options.set64BitMode(true);
             else
                 print_usage_and_exit("Can't recognize bit mode: " + std::string(arg));
         }
@@ -169,13 +179,12 @@ int main (int argc, char* argv[128]) {
     };
 
     // Detects desired language standard
-    auto standard_action = [] (std::string arg) {
-        std::string search_str = arg;
-        auto search_res = Options::str_to_standard.find(search_str);
-        if (search_res != Options::str_to_standard.end())
-            options->standard_id = search_res->second;
+    auto standard_action = [&generator_options] (std::string arg) {
+        auto search_res = GeneratorOptions::str_to_standard.find(arg);
+        if (search_res != GeneratorOptions::str_to_standard.end())
+            generator_options.setStandard(search_res->second);
         else {
-            print_usage_and_exit("Can't recognize language standard: --std=" + search_str + "\n");
+            print_usage_and_exit("Can't recognize language standard: --std=" + arg + "\n");
         }
     };
 
@@ -209,18 +218,10 @@ int main (int argc, char* argv[128]) {
         std::cerr << "For help type " << argv [0] << " -h" << std::endl;
     }
 
-    rand_val_gen = std::make_shared<RandValGen>(RandValGen (seed));
-    default_gen_policy.init_from_config();
+    // Apply chosen options
+    generator_options.jsonToObj();
 
-//    self_test();
-
-    Program mas (out_dir);
-    mas.generate ();
-    mas.emit_func ();
-    mas.emit_decl ();
-    mas.emit_main ();
-
-    delete(options);
+    std::cout << generator_options.mode_64bit << std::endl;
 
     return 0;
 }

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2017, Intel Corporation
+Copyright (c) 2017-2018, Intel Corporation
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,8 +18,17 @@ limitations under the License.
 
 #pragma once
 
+// Macros for error handling
 #define ERROR(err_message) \
     do { \
-        std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ", function " << __func__ << "():\n    " << err_message << std::endl; \
+        std::cerr << "ERROR at " << __FILE__ << ":" << __LINE__ << ", function " << __func__ << "():\n    " \
+            << (err_message) << std::endl; \
         abort(); \
+    } while (false)
+
+// Macros for warning handling
+#define WARNING(warning_message) \
+    do { \
+        std::cerr << "WARNING at " << __FILE__ << ":" << __LINE__ << ", function " << __func__ << "():\n    " \
+            << (warning_message) << std::endl; \
     } while (false)
