@@ -37,7 +37,7 @@ LIBSOURCES_DIR=lib/
 LIBSOURCES_SRC=$(addprefix $(LIBSOURCES_DIR), $(LIBSOURCES))
 LIBOBJS=$(addprefix $(OBJ_DIR), $(LIBSOURCES:.cpp=.o))
 
-SOURCES=main.cpp
+SOURCES=main.cpp type_test.cpp
 SOURCES_DIR=src/
 SOURCES_SRC=$(addprefix $(SOURCES_DIR), $(SOURCES))
 OBJS=$(addprefix $(OBJ_DIR), $(SOURCES:.cpp=.o))

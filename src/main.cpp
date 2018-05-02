@@ -123,6 +123,7 @@ bool parse_long_and_short_args (int argc, int &argv_iter, char** &argv, const st
            parse_short_args(argc, argv_iter, argv, short_arg, action, error_msg);
 }
 
+void type_test();
 
 int main (int argc, char* argv[128]) {
     GeneratorOptions& generator_options = GeneratorOptions::getInstance();
@@ -220,6 +221,8 @@ int main (int argc, char* argv[128]) {
 
     // Apply chosen options
     generator_options.jsonToObj();
+
+    type_test();
 
     return 0;
 }

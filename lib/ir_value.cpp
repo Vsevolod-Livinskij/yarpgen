@@ -21,46 +21,46 @@ limitations under the License.
 using namespace yarpgen;
 
 template <>
-bool& IRValue::get_value () {
+bool& IRValue::getValueRef() {
     return value.bool_val;
 }
 
 template <>
-signed char & IRValue::get_value () {
+signed char & IRValue::getValueRef() {
     return value.schar_val;
 }
 
 template <>
-unsigned char & IRValue::get_value () {
+unsigned char & IRValue::getValueRef() {
     return value.uchar_val;
 }
 
 template <>
-short & IRValue::get_value () {
+short & IRValue::getValueRef() {
     return value.shrt_val;
 }
 
 template <>
-unsigned short & IRValue::get_value () {
+unsigned short & IRValue::getValueRef() {
     return value.ushrt_val;
 }
 
 template <>
-int & IRValue::get_value () {
+int & IRValue::getValueRef() {
     return value.int_val;
 }
 
 template <>
-unsigned int & IRValue::get_value () {
+unsigned int & IRValue::getValueRef() {
     return value.uint_val;
 }
 
 template <>
-long long int & IRValue::get_value () {
+long long int & IRValue::getValueRef() {
     return value.llong_val;
 }
 
 template <>
-unsigned long long int & IRValue::get_value () {
+unsigned long long int & IRValue::getValueRef() {
     return value.ullong_val;
 }

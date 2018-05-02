@@ -49,40 +49,41 @@ public:
     };
 
     template <typename T>
-    T& get_value();
+    T& getValueRef();
 
-    Value value;
+    IntTypeID getIntTypeID() { return type_id; }
 
 private:
+    Value value;
     IntTypeID type_id;
     UB ub_code;
 };
 
 template <>
-bool& IRValue::get_value ();
+bool& IRValue::getValueRef();
 
 template <>
-signed char & IRValue::get_value ();
+signed char & IRValue::getValueRef();
 
 template <>
-unsigned char & IRValue::get_value ();
+unsigned char & IRValue::getValueRef();
 
 template <>
-short & IRValue::get_value();
+short & IRValue::getValueRef();
 
 template <>
-unsigned short & IRValue::get_value();
+unsigned short & IRValue::getValueRef();
 
 template <>
-int & IRValue::get_value();
+int & IRValue::getValueRef();
 
 template <>
-unsigned int & IRValue::get_value();
+unsigned int & IRValue::getValueRef();
 
 template <>
-long long int & IRValue::get_value();
+long long int & IRValue::getValueRef();
 
 template <>
-unsigned long long int & IRValue::get_value ();
+unsigned long long int & IRValue::getValueRef();
 }
 
