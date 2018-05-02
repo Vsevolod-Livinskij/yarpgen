@@ -45,7 +45,6 @@ GeneratorOptions::GeneratorOptions () {
 
 GeneratorOptions& GeneratorOptions::getInstance () {
     static GeneratorOptions generator_options;
-    std::cout << "Inside: " << static_cast<int>(generator_options.standard_id) << std::endl;
     return generator_options;
 }
 

@@ -17,6 +17,7 @@ limitations under the License.
 //////////////////////////////////////////////////////////////////////////////
 
 #include <cassert>
+#include <type.hpp>
 
 #include "options.hpp"
 
@@ -125,7 +126,6 @@ bool parse_long_and_short_args (int argc, int &argv_iter, char** &argv, const st
 
 int main (int argc, char* argv[128]) {
     GeneratorOptions& generator_options = GeneratorOptions::getInstance();
-    std::cout << "One:" << static_cast<int>(generator_options.standard_id) << std::endl;
     uint64_t seed = 0;
     std::string out_dir = "./";
     bool quiet = false;
@@ -220,8 +220,6 @@ int main (int argc, char* argv[128]) {
 
     // Apply chosen options
     generator_options.jsonToObj();
-
-    std::cout << generator_options.mode_64bit << std::endl;
 
     return 0;
 }

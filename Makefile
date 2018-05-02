@@ -25,13 +25,14 @@ else
 endif
 
 CXX=clang++
-CXXFLAGS=-std=c++14 -Wall -Wpedantic -Werror -MMD -MP -DBUILD_DATE="\"$(BUILD_DATE)\"" -DBUILD_VERSION="\"$(BUILD_VERSION)\"" -Iinclude
+CXXFLAGS=-std=c++14 -Wall -Wpedantic -Werror -MMD -MP -DBUILD_DATE="\"$(BUILD_DATE)\"" -DBUILD_VERSION="\"$(BUILD_VERSION)\""  -DBIT_MODE64=$(BIT_MODE64) -Iinclude
 OPT=-O3
 LDFLAGS=-L./ -std=c++14
+BIT_MODE64=true
 
 OBJ_DIR=objs/
 
-LIBSOURCES=config_parser.cpp options.cpp
+LIBSOURCES=config_parser.cpp ir_value.cpp options.cpp type.cpp
 LIBSOURCES_DIR=lib/
 LIBSOURCES_SRC=$(addprefix $(LIBSOURCES_DIR), $(LIBSOURCES))
 LIBOBJS=$(addprefix $(OBJ_DIR), $(LIBSOURCES:.cpp=.o))
@@ -42,7 +43,7 @@ SOURCES_SRC=$(addprefix $(SOURCES_DIR), $(SOURCES))
 OBJS=$(addprefix $(OBJ_DIR), $(SOURCES:.cpp=.o))
 
 
-HEADERS=config_parser.hpp json.hpp options.hpp utils.hpp
+HEADERS=config_parser.hpp ir_value.hpp json.hpp options.hpp type_enums.hpp type.hpp utils.hpp
 HEADERS_DIR=include/
 HEADERS_SRC=$(addprefix $(HEADERS_DIR), $(HEADERS))
 
