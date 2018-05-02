@@ -51,7 +51,7 @@ void IdxStrConverter::addIdx (std::string name) {
 }
 
 // All possible patch actions
-ENUM_CLASS_WITH_STR(PatchActions, add, replace, remove);
+ENUM_CLASS_WITH_STR(PatchActions, add, replace, remove)
 
 static std::string outer_delimiter = "|";
 static std::string inner_delimiter = "#";
