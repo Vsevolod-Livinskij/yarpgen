@@ -68,8 +68,6 @@ struct GeneratorOptions : public Options {
 // User-defined parameters
     // Selected language standard
     StandardID standard_id;
-    // Determines if selected bit-mode is 64 bit-mode
-    bool mode_64bit;
 
 
 // Functions
@@ -80,7 +78,6 @@ struct GeneratorOptions : public Options {
     //bool isOpenCL ();
     void jsonToObj () override;
     void setStandard (StandardID std_id);
-    void set64BitMode (bool is_64_bit_mode);
 
 
 // Auxiliary parameters

@@ -59,7 +59,6 @@ void print_usage_and_exit (const std::string& error_msg = "") {
     std::cout << "\t-v, --version             Print yarpgen version\n";
     std::cout << "\t-d, --out-dir=<out-dir>   Output directory\n";
     std::cout << "\t-s, --seed=<seed>         Predefined seed (it is accepted in form of SSS or VV_SSS)\n";
-    std::cout << "\t-m, --bit-mode=<32/64>    Generated test's bit mode\n";
     std::cout << "\t--std=<standard>          Generated test's language standard\n";
 
     // Print all supported language standards
@@ -162,23 +161,6 @@ int main (int argc, char* argv[128]) {
         }
     };
 
-    // Detects YARPGen bit_mode
-    auto bit_mode_action = [&generator_options] (std::string arg) {
-        size_t *pEnd = nullptr;
-        try {
-            uint64_t bit_mode_arg = std::stoull(arg, pEnd, 10);
-            if (bit_mode_arg == 32)
-                generator_options.set64BitMode(false);
-            else if (bit_mode_arg == 64)
-                generator_options.set64BitMode(true);
-            else
-                print_usage_and_exit("Can't recognize bit mode: " + std::string(arg));
-        }
-        catch (std::invalid_argument& e) {
-            print_usage_and_exit("Can't recognize bit mode: " + arg);
-        }
-    };
-
     // Detects desired language standard
     auto standard_action = [&generator_options] (std::string arg) {
         auto search_res = GeneratorOptions::str_to_standard.find(arg);
@@ -207,8 +189,6 @@ int main (int argc, char* argv[128]) {
                                            "Output directory wasn't specified.")) {}
         else if (parse_long_and_short_args(argc, i, argv, "-s", "--seed", seed_action,
                                            "Seed wasn't specified.")) {}
-        else if (parse_long_and_short_args(argc, i, argv, "-m", "--bit-mode", bit_mode_action,
-                                           "Can't recognize bit mode:")) {}
         else if (argv[i][0] == '-') {
             print_usage_and_exit("Unknown option: " + std::string(argv[i]));
         }

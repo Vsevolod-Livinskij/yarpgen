@@ -28,7 +28,6 @@ using namespace yarpgen;
 GeneratorOptions::GeneratorOptions () {
     // Add user-defined parameters to JSON configuration
     ADD_VAR(standard_id, StandardID::CXX11, "selected std", default_json, idx_str_conv);
-    ADD_VAR(mode_64bit, true, "is 64-bit mode on", default_json, idx_str_conv);
 
     json = default_json;
 
@@ -75,12 +74,6 @@ void GeneratorOptions::setStandard (StandardID std_id) {
     json ["standard_id"] ["value"] = standard_id;
 }
 
-void GeneratorOptions::set64BitMode (bool is_64_bit_mode) {
-    mode_64bit = is_64_bit_mode;
-    //TODO: is it better to do it through ADD_VAR?
-    json ["mode_64bit"] ["value"] = mode_64bit;
-}
-
 
 bool GeneratorOptions::isC() {
     return StandardID::C99 <= standard_id && standard_id < StandardID::MAX_CStandardID;
@@ -101,7 +94,6 @@ void GeneratorOptions::jsonToObj () {
     for (nlohmann::json::iterator it = json.begin(); it != json.end(); ++it) {
         bool missed = true;
         PARSE_VAR(standard_id, it, missed);
-        PARSE_VAR(mode_64bit, it, missed);
 
         // Some error message and move forward
         ever_missed |= missed;
