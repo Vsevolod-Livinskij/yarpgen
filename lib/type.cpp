@@ -104,6 +104,8 @@ std::shared_ptr<IntegralType> IntegralType::init (IntTypeID _type_id, bool _is_s
         case IntTypeID::ULLONG:
             ret = std::make_shared<TypeULLong>(TypeULLong(_is_static, _cv_qual));
             break;
+        case IntTypeID::MAX_INT_TYPE_ID:
+            ERROR("Unsupported IntTypeID");
     }
 
     int_type_buffer[key] = ret;
