@@ -16,7 +16,7 @@
 #
 ###############################################################################
 
-set(LIB_SRCS type.cpp variable.cpp expr.cpp stmt.cpp gen_policy.cpp sym_table.cpp program.cpp options.cpp)
+set(LIB_SRCS type.cpp variable.cpp expr.cpp stmt.cpp gen_policy.cpp sym_table.cpp program.cpp options.cpp cxx_proto.pb.cpp)
 
 set(SRCS ${LIB_SRCS} main.cpp self-test.cpp)
 

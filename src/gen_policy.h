@@ -56,7 +56,9 @@ class RandValGen {
     public:
         // Specific seed can be passed to constructor to reproduce the test.
         // Zero value is reserved (it notifies RandValGen that it can choose any)
-        RandValGen (uint64_t _seed);
+        static void init(uint64_t _base_seed);
+
+        RandValGen (uint64_t subseed);
 
         template<typename T>
         T get_rand_value (T from, T to) {
@@ -113,6 +115,7 @@ class RandValGen {
 
     private:
         uint64_t seed;
+        static uint64_t base_seed;
         std::mt19937_64 rand_gen;
 };
 

@@ -25,6 +25,7 @@ limitations under the License.
 #include "variable.h"
 #include "ir_node.h"
 #include "expr.h"
+#include "cxx_proto.pb.h"
 
 namespace yarpgen {
 
@@ -121,9 +122,9 @@ class IfStmt : public Stmt {
         static bool count_if_taken (std::shared_ptr<Expr> cond);
         void emit (std::ostream& stream, std::string offset = "");
         // For info about count_up_total see note above
-        static std::shared_ptr<IfStmt> generate (std::shared_ptr<Context> ctx,
-                                                 std::vector<std::shared_ptr<Expr>> inp,
-                                                 bool count_up_total);
+        static std::shared_ptr<IfStmt> generate(std::shared_ptr<Context> ctx, std::vector<std::shared_ptr<Expr>> inp,
+                                                bool count_up_total,
+                                                std::shared_ptr<Scope> if_scope, std::shared_ptr<Scope> else_scope);
 
     private:
         // TODO: do we need it? It should indicate whether the scope is evaluated.

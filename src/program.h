@@ -39,7 +39,7 @@ class Program {
         Program (std::string _out_folder);
 
         // It initializes global Context and launches generation process.
-        void generate ();
+        void generate(ProgSeed *prog_design);
 
         // Print-out methods
         // To get valid test, all of them should be called (the order doesn't matter)

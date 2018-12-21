@@ -23,6 +23,10 @@ limitations under the License.
 #include <functional>
 #include <iostream>
 #include <sstream>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <google/protobuf/text_format.h>
+#include <google/protobuf/io/zero_copy_stream_impl.h>
 
 #include "gen_policy.h"
 #include "options.h"
@@ -31,6 +35,8 @@ limitations under the License.
 #include "type.h"
 #include "variable.h"
 #include "util.h"
+
+#include "cxx_proto.pb.h"
 
 #ifndef BUILD_DATE
 #define BUILD_DATE __DATE__
@@ -120,7 +126,7 @@ bool parse_long_and_short_args (int argc, int &argv_iter, char** &argv, std::str
 
 int main (int argc, char* argv[128]) {
     options = new Options;
-    uint64_t seed = 0;
+    std::string seed = "seed.txt";
     std::string out_dir = "./";
     bool quiet = false;
 
@@ -132,6 +138,7 @@ int main (int argc, char* argv[128]) {
 
     // Detects predefined seed
     auto seed_action = [&seed] (std::string arg) {
+        /*
         size_t *pEnd = nullptr;
         std::stringstream arg_ss(arg);
         std::string segment;
@@ -149,6 +156,8 @@ int main (int argc, char* argv[128]) {
         catch (std::invalid_argument& e) {
             print_usage_and_exit("Can't recognize seed: " + arg);
         }
+        */
+        seed = arg;
     };
 
     // Detects YARPGen bit_mode
@@ -209,17 +218,43 @@ int main (int argc, char* argv[128]) {
         std::cerr << "For help type " << argv [0] << " -h" << std::endl;
     }
 
-    rand_val_gen = std::make_shared<RandValGen>(RandValGen (seed));
-    default_gen_policy.init_from_config();
+    //rand_val_gen = std::make_shared<RandValGen>(RandValGen (seed));
+    //default_gen_policy.init_from_config();
 
 //    self_test();
 
+    auto* prog_seed = new ProgSeed;
+
+    int fileDescriptor = open(argv[1], O_RDONLY);
+
+    if( fileDescriptor < 0 )
+    {
+        std::cerr << " Error opening the file " << std::endl;
+        return 0;
+    }
+
+    google::protobuf::io::FileInputStream fileInput(fileDescriptor);
+    fileInput.SetCloseOnDelete( true );
+
+    if (!google::protobuf::TextFormat::Parse(&fileInput, prog_seed))
+    {
+        std::cerr << std::endl << "Failed to parse file!" << std::endl;
+        return -1;
+    }
+
+    RandValGen::init(prog_seed->base_seed());
+    rand_val_gen = std::make_shared<RandValGen>(RandValGen (0));
+    default_gen_policy.init_from_config();
+
     Program mas (out_dir);
-    mas.generate ();
-    mas.emit_func ();
-    mas.emit_decl ();
+    mas.generate(prog_seed);
+
+    //mas.emit_func ();
+    //mas.emit_decl ();
     mas.emit_main ();
 
+
+    delete(prog_seed);
     delete(options);
 
     return 0;

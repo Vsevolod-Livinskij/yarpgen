@@ -240,15 +240,40 @@ std::shared_ptr<ScopeStmt> ScopeStmt::generate (std::shared_ptr<Context> ctx) {
 
     //TODO: add to gen_policy stmt number
     auto p = ctx->get_gen_policy();
-    uint32_t scope_stmt_count = rand_val_gen->get_rand_value(p->get_min_scope_stmt_count(),
-                                                             p->get_max_scope_stmt_count());
+    uint32_t scope_stmt_count = p->get_max_scope_stmt_count();
+
+    auto scope_design = ctx->get_scope_design();
 
     for (uint32_t i = 0; i < scope_stmt_count; ++i) {
+        rand_val_gen = std::make_shared<RandValGen>(RandValGen(ctx->get_depth() * 1000 + i));
+        StmtGen stmt_design;
+        if (i == 0)
+            stmt_design = scope_design->stmt1();
+        else if (i == 1)
+            stmt_design = scope_design->stmt2();
+        else if (i == 2)
+            stmt_design = scope_design->stmt3();
+        else if (i == 3)
+            stmt_design = scope_design->stmt4();
+        else if (i == 4)
+            stmt_design = scope_design->stmt5();
+        else if (i == 5)
+            stmt_design = scope_design->stmt6();
+        else if (i == 6)
+            stmt_design = scope_design->stmt7();
+        else if (i == 7)
+            stmt_design = scope_design->stmt8();
+        else if (i == 8)
+            stmt_design = scope_design->stmt9();
+        else
+            stmt_design = scope_design->stmt10();
+        /*
         if (Stmt::total_stmt_count >= p->get_max_total_stmt_count() ||
             Stmt::func_stmt_count  >= p->get_max_func_stmt_count())
             //TODO: Can we somehow eliminate compiler timeout with the help of this?
             //GenPolicy::get_test_complexity() >= p->get_max_test_complexity())
             break;
+        */
 
         // Randomly decide if we want to create a new CSE
         GenPolicy::ArithCSEGenID add_cse = rand_val_gen->get_rand_id(p->get_arith_cse_gen());
@@ -260,9 +285,9 @@ std::shared_ptr<ScopeStmt> ScopeStmt::generate (std::shared_ptr<Context> ctx) {
         }
 
         // Randomly pick next Stmt ID
-        Node::NodeID gen_id = rand_val_gen->get_rand_id(p->get_stmt_gen_prob());
+        //Node::NodeID gen_id = rand_val_gen->get_rand_id(p->get_stmt_gen_prob());
         // ExprStmt
-        if (gen_id == Node::NodeID::EXPR) {
+        if (stmt_design.has_assign()) {
             // Are we going to use mixed variable or create new output variable?
             bool use_mix = rand_val_gen->get_rand_id(p->get_out_data_category_prob()) ==
                            GenPolicy::OutDataCategoryID::MIX;
@@ -373,7 +398,7 @@ std::shared_ptr<ScopeStmt> ScopeStmt::generate (std::shared_ptr<Context> ctx) {
             }
         }
         // DeclStmt or if we want IfStmt, but have reached its depth limit
-        else if (gen_id == Node::NodeID::DECL || (ctx->get_if_depth() == p->get_max_if_depth())) {
+        else if (stmt_design.has_decl()) {
             std::shared_ptr<Context> decl_ctx = std::make_shared<Context>(*(p), ctx, Node::NodeID::DECL, true);
             std::shared_ptr<DeclStmt> tmp_decl;
 
@@ -413,10 +438,19 @@ std::shared_ptr<ScopeStmt> ScopeStmt::generate (std::shared_ptr<Context> ctx) {
             ret->add_stmt(tmp_decl);
         }
         // IfStmt
-        else if (gen_id == Node::NodeID::IF) {
-            ret->add_stmt(IfStmt::generate(std::make_shared<Context>(*(p), ctx, Node::NodeID::IF, true), inp, true));
+        else if (stmt_design.has_if_stmt()) {
+            auto new_ctx = std::make_shared<Context>(*(p), ctx, Node::NodeID::IF, true);
+            ret->add_stmt(IfStmt::generate(std::make_shared<Context>(*(p), ctx, Node::NodeID::IF, true), inp, true,
+                          std::make_shared<Scope>(stmt_design.if_stmt().scope()), nullptr));
         }
-
+        else if (stmt_design.has_if_else_stmt()) {
+            auto new_ctx = std::make_shared<Context>(*(p), ctx, Node::NodeID::IF, true);
+            ret->add_stmt(IfStmt::generate(std::make_shared<Context>(*(p), ctx, Node::NodeID::IF, true), inp, true,
+                          std::make_shared<Scope>(stmt_design.if_else_stmt().if_scope()),
+                          std::make_shared<Scope>(stmt_design.if_else_stmt().else_scope())));
+        }
+        else if (stmt_design.has_blank()) {
+        }
     }
     return ret;
 }
@@ -544,20 +578,25 @@ IfStmt::IfStmt (std::shared_ptr<Expr> _cond, std::shared_ptr<ScopeStmt> _if_br, 
 }
 
 // This function randomly creates new IfStmt (its condition, if branch body and and optional else branch).
-std::shared_ptr<IfStmt> IfStmt::generate (std::shared_ptr<Context> ctx,
-                                          std::vector<std::shared_ptr<Expr>> inp,
-                                          bool count_up_total) {
+std::shared_ptr<IfStmt> IfStmt::generate(std::shared_ptr<Context> ctx, std::vector<std::shared_ptr<Expr>> inp,
+                                         bool count_up_total,
+                                         std::shared_ptr<Scope> if_scope, std::shared_ptr<Scope> else_scope) {
     Stmt::increase_stmt_count();
     GenPolicy::add_to_complexity(Node::NodeID::IF);
     std::shared_ptr<Expr> cond = ArithExpr::generate(ctx, inp);
     if (count_up_total)
         Expr::increase_expr_count(cond->get_complexity());
-    bool else_exist = rand_val_gen->get_rand_id(ctx->get_gen_policy()->get_else_prob());
+    bool else_exist = else_scope.use_count() != 0;
     bool cond_taken = IfStmt::count_if_taken(cond);
-    std::shared_ptr<ScopeStmt> then_br = ScopeStmt::generate(std::make_shared<Context>(*(ctx->get_gen_policy()), ctx, Node::NodeID::SCOPE, cond_taken));
+    std::shared_ptr<Context> if_ctx = std::make_shared<Context>(*(ctx->get_gen_policy()), ctx, Node::NodeID::SCOPE, cond_taken);
+    if_ctx->set_scope_design(std::move(if_scope));
+    std::shared_ptr<ScopeStmt> then_br = ScopeStmt::generate(if_ctx);
     std::shared_ptr<ScopeStmt> else_br = nullptr;
-    if (else_exist)
-        else_br = ScopeStmt::generate(std::make_shared<Context>(*(ctx->get_gen_policy()), ctx, Node::NodeID::SCOPE, !cond_taken));
+    if (else_exist) {
+        std::shared_ptr<Context> else_ctx = std::make_shared<Context>(*(ctx->get_gen_policy()), ctx, Node::NodeID::SCOPE, !cond_taken);
+        else_ctx->set_scope_design(else_scope);
+        else_br = ScopeStmt::generate(else_ctx);
+    }
     return std::make_shared<IfStmt>(cond, then_br, else_br);
 }
 

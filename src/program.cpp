@@ -32,9 +32,10 @@ Program::Program (std::string _out_folder) {
     functions.reserve(gen_policy.get_test_func_count());
 }
 
-void Program::generate () {
+void Program::generate(ProgSeed *prog_design) {
     NameHandler& name_handler = NameHandler::get_instance();
     for (unsigned int i = 0; i < gen_policy.get_test_func_count(); ++i) {
+        rand_val_gen = std::make_shared<RandValGen>(RandValGen(0));
         name_handler.set_test_func_prefix(i);
 
         extern_inp_sym_table.push_back(std::make_shared<SymbolTable>());
@@ -45,6 +46,7 @@ void Program::generate () {
         ctx.set_extern_inp_sym_table(extern_inp_sym_table.back());
         ctx.set_extern_mix_sym_table(extern_mix_sym_table.back());
         ctx.set_extern_out_sym_table(extern_out_sym_table.back());
+        ctx.set_scope_design(std::make_shared<Scope>(prog_design->top_scope()));
         std::shared_ptr<Context> ctx_ptr = std::make_shared<Context>(ctx);
         form_extern_sym_table(ctx_ptr);
         functions.push_back(ScopeStmt::generate(ctx_ptr));
@@ -302,7 +304,13 @@ void Program::emit_main () {
     // Headers
     //////////////////////////////////////////////////////////
     out_file << "#include <stdio.h>\n";
-    out_file << "#include \"init.h\"\n\n";
+
+    if (options->include_valarray)
+        out_file << "#include <valarray>\n\n";
+    if (options->include_vector)
+        out_file << "#include <vector>\n\n";
+    if (options->include_array)
+        out_file << "#include <array>\n\n";
 
     // Hash
     //////////////////////////////////////////////////////////
@@ -382,8 +390,12 @@ void Program::emit_main () {
         extern_out_sym_table.at(i)->emit_ptr_check(out_file, "    ");
 
         out_file << "}\n\n";
+    }
 
-        out_file << "extern void " << NameHandler::common_test_func_prefix << i << "_foo ();\n\n";
+    for (unsigned int i = 0; i < gen_policy.get_test_func_count(); ++i) {
+        out_file << "void " << NameHandler::common_test_func_prefix << i << "_foo ()\n";
+        functions.at(i)->emit(out_file);
+        out_file << "\n";
     }
 
     // Main

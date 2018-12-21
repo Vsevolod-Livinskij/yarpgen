@@ -1,0 +1,50 @@
+syntax = "proto2";
+
+
+message BlankStmtGen {
+}
+
+message AssignStmtGen {
+}
+
+message DeclStmtGen {
+}
+
+message IfStmtGen {
+    required Scope scope = 1;
+}
+
+message IfElseStmtGen {
+    required Scope if_scope = 1;
+    required Scope else_scope = 2;
+}
+
+message StmtGen {
+    oneof stmt_gen {
+        BlankStmtGen blank = 1;
+        AssignStmtGen assign = 2;
+        DeclStmtGen decl = 3;
+        IfStmtGen if_stmt = 4;
+        IfElseStmtGen if_else_stmt = 5;
+    }
+}
+
+message Scope {
+    required StmtGen stmt1 = 1;
+    required StmtGen stmt2 = 2;
+    required StmtGen stmt3 = 3;
+    required StmtGen stmt4 = 4;
+    required StmtGen stmt5 = 5;
+    required StmtGen stmt6 = 6;
+    required StmtGen stmt7 = 7;
+    required StmtGen stmt8 = 8;
+    required StmtGen stmt9 = 9;
+    required StmtGen stmt10 = 10;
+}
+
+message ProgSeed {
+    required uint64 base_seed = 1;
+    required Scope top_scope = 2;
+}
+
+package yarpgen;

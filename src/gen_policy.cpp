@@ -23,49 +23,49 @@ limitations under the License.
 
 using namespace yarpgen;
 
-const uint32_t TEST_FUNC_COUNT = 5;
+const uint32_t TEST_FUNC_COUNT = 1;
 
 const uint32_t MAX_ALLOWED_INT_TYPES = 3;
 
-const uint32_t MAX_ARITH_DEPTH = 5;
+const uint32_t MAX_ARITH_DEPTH = 2;
 const uint32_t MAX_TOTAL_EXPR_COUNT = 50000000;
 const uint32_t MAX_FUNC_EXPR_COUNT = 10000000;
 
-const uint32_t MIN_SCOPE_STMT_COUNT = 5;
+const uint32_t MIN_SCOPE_STMT_COUNT = 0;
 const uint32_t MAX_SCOPE_STMT_COUNT = 10;
 
 const uint32_t MAX_TOTAL_STMT_COUNT = 5000;
 const uint32_t MAX_FUNC_STMT_COUNT = 1000;
 
-const uint32_t MIN_INP_VAR_COUNT = 20;
-const uint32_t MAX_INP_VAR_COUNT = 60;
-const uint32_t MIN_MIX_VAR_COUNT = 20;
-const uint32_t MAX_MIX_VAR_COUNT = 60;
+const uint32_t MIN_INP_VAR_COUNT = 1;
+const uint32_t MAX_INP_VAR_COUNT = 2;
+const uint32_t MIN_MIX_VAR_COUNT = 1;
+const uint32_t MAX_MIX_VAR_COUNT = 2;
 
-const uint32_t MAX_CSE_COUNT = 5;
+const uint32_t MAX_CSE_COUNT = 1;
 
-const uint32_t MAX_IF_DEPTH = 3;
+const uint32_t MAX_IF_DEPTH = 1;
 
 const uint64_t MAX_TEST_COMPLEXITY = UINT64_MAX;
 
 const uint32_t MIN_STRUCT_TYPES_COUNT = 0;
-const uint32_t MAX_STRUCT_TYPES_COUNT = 6;
+const uint32_t MAX_STRUCT_TYPES_COUNT = 0;
 const uint32_t MIN_INP_STRUCT_COUNT = 0;
-const uint32_t MAX_INP_STRUCT_COUNT = 6;
+const uint32_t MAX_INP_STRUCT_COUNT = 0;
 const uint32_t MIN_MIX_STRUCT_COUNT = 0;
-const uint32_t MAX_MIX_STRUCT_COUNT = 6;
+const uint32_t MAX_MIX_STRUCT_COUNT = 0;
 const uint32_t MIN_OUT_STRUCT_COUNT = 0;
-const uint32_t MAX_OUT_STRUCT_COUNT = 8;
+const uint32_t MAX_OUT_STRUCT_COUNT = 0;
 const uint32_t MIN_STRUCT_MEMBER_COUNT = 1;
-const uint32_t MAX_STRUCT_MEMBER_COUNT = 10;
-const uint32_t MAX_STRUCT_DEPTH = 5;
+const uint32_t MAX_STRUCT_MEMBER_COUNT = 1;
+const uint32_t MAX_STRUCT_DEPTH = 1;
 const uint32_t MIN_BIT_FIELD_SIZE = 8;
 const uint32_t MAX_BIT_FIELD_SIZE = 2; //TODO: unused, because it cause different result for LLVM and GCC. See pr70733
 
 const uint32_t CONST_BUFFER_SIZE = 4;
 
 // This switch totally disables array in generated tests
-const bool DISABLE_ARRAYS = false;
+const bool DISABLE_ARRAYS = true;
 const uint32_t MIN_ARRAY_SIZE = 2;
 const uint32_t MAX_ARRAY_SIZE = 10;
 const uint32_t MIN_ARRAY_TYPES_COUNT = 0;
@@ -78,17 +78,25 @@ const uint32_t MIN_OUT_ARRAY_COUNT = 0;
 const uint32_t MAX_OUT_ARRAY_COUNT = 8;
 
 const uint32_t MIN_INP_PTR_COUNT = 0;
-const uint32_t MAX_INP_PTR_COUNT = 10;
+const uint32_t MAX_INP_PTR_COUNT = 0;
 const uint32_t MIN_MIX_PTR_COUNT = 0;
-const uint32_t MAX_MIX_PTR_COUNT = 10;
+const uint32_t MAX_MIX_PTR_COUNT = 0;
 const uint32_t MIN_OUT_PTR_COUNT = 0;
-const uint32_t MAX_OUT_PTR_COUNT = 10;
+const uint32_t MAX_OUT_PTR_COUNT = 0;
 
 ///////////////////////////////////////////////////////////////////////////////
 
 std::shared_ptr<RandValGen> yarpgen::rand_val_gen;
 
-RandValGen::RandValGen (uint64_t _seed) {
+uint64_t yarpgen::RandValGen::base_seed;
+
+void RandValGen::init(uint64_t _base_seed) {
+    base_seed = _base_seed;
+    std::cout << "/*SEED " << options->plane_yarpgen_version << "_" << base_seed << "*/" << std::endl;
+}
+
+RandValGen::RandValGen (uint64_t subseed) {
+#if 0
     if (_seed != 0) {
         seed = _seed;
     }
@@ -98,7 +106,12 @@ RandValGen::RandValGen (uint64_t _seed) {
     }
     std::cout << "/*SEED " << options->plane_yarpgen_version << "_" << seed << "*/" << std::endl;
     rand_gen = std::mt19937_64(seed);
+#endif
+    seed = base_seed + subseed;
+    rand_gen = std::mt19937_64(seed);
 }
+
+
 
 const std::string NameHandler::common_test_func_prefix = "tf_";
 
@@ -146,17 +159,17 @@ void GenPolicy::init_from_config () {
     allow_mix_types_in_struct = true;
     member_use_prob.push_back(Probability<bool>(true, 80));
     member_use_prob.push_back(Probability<bool>(false, 20));
-    rand_val_gen->shuffle_prob(member_use_prob);
+    //rand_val_gen->shuffle_prob(member_use_prob);
     max_struct_depth = MAX_STRUCT_DEPTH;
     member_class_prob.push_back(Probability<Data::VarClassID>(Data::VarClassID::VAR, 70));
     member_class_prob.push_back(Probability<Data::VarClassID>(Data::VarClassID::STRUCT, 30));
-    rand_val_gen->shuffle_prob(member_class_prob);
+    //rand_val_gen->shuffle_prob(member_class_prob);
     min_bit_field_size = MIN_BIT_FIELD_SIZE;
     max_bit_field_size = MAX_BIT_FIELD_SIZE;
     bit_field_prob.push_back(Probability<BitFieldID>(UNNAMED, 15));
     bit_field_prob.push_back(Probability<BitFieldID>(NAMED, 20));
     bit_field_prob.push_back(Probability<BitFieldID>(MAX_BIT_FIELD_ID, 65));
-    rand_val_gen->shuffle_prob(bit_field_prob);
+    //rand_val_gen->shuffle_prob(bit_field_prob);
 
     out_data_type_prob.emplace_back(Probability<OutDataTypeID>(VAR, 50));
     out_data_type_prob.emplace_back(Probability<OutDataTypeID>(MEMBER, 25));
@@ -164,17 +177,17 @@ void GenPolicy::init_from_config () {
     out_data_type_prob.emplace_back(Probability<OutDataTypeID>(MEMBER_IN_ARRAY, 10));
     out_data_type_prob.emplace_back(Probability<OutDataTypeID>(DEREFERENCE, 10));
     out_data_type_prob.emplace_back(Probability<OutDataTypeID>(POINTER, 10));
-    rand_val_gen->shuffle_prob(out_data_type_prob);
+    //rand_val_gen->shuffle_prob(out_data_type_prob);
 
     out_data_category_prob.emplace_back(Probability<OutDataCategoryID>(MIX, 50));
     out_data_category_prob.emplace_back(Probability<OutDataCategoryID>(OUT, 50));
-    rand_val_gen->shuffle_prob(out_data_category_prob);
+    //rand_val_gen->shuffle_prob(out_data_category_prob);
 
     min_array_size = MIN_ARRAY_SIZE;
     max_array_size = MAX_ARRAY_SIZE;
     array_base_type_prob.emplace_back(Probability<Type::TypeID>(Type::BUILTIN_TYPE, 60));
     array_base_type_prob.emplace_back(Probability<Type::TypeID>(Type::STRUCT_TYPE, 40));
-    rand_val_gen->shuffle_prob(array_base_type_prob);
+    //rand_val_gen->shuffle_prob(array_base_type_prob);
     array_kind_prob.emplace_back(Probability<ArrayType::Kind>(ArrayType::C_ARR, 40));
     if (options->is_cxx()) {
         array_kind_prob.emplace_back(Probability<ArrayType::Kind>(ArrayType::VAL_ARR, 15));
@@ -183,10 +196,10 @@ void GenPolicy::init_from_config () {
             array_kind_prob.emplace_back(Probability<ArrayType::Kind>(ArrayType::STD_VEC, 15));
         }
     }
-    rand_val_gen->shuffle_prob(array_kind_prob);
+    //rand_val_gen->shuffle_prob(array_kind_prob);
     array_elem_subs_prob.emplace_back(Probability<ArrayType::ElementSubscript>(ArrayType::Brackets, 50));
     array_elem_subs_prob.emplace_back(Probability<ArrayType::ElementSubscript>(ArrayType::At, 50));
-    rand_val_gen->shuffle_prob(array_elem_subs_prob);
+    //rand_val_gen->shuffle_prob(array_elem_subs_prob);
     min_array_type_count = MIN_ARRAY_TYPES_COUNT;
     max_array_type_count = MAX_ARRAY_TYPES_COUNT;
     min_inp_array_count = MIN_INP_ARRAY_COUNT;
@@ -230,13 +243,13 @@ void GenPolicy::init_from_config () {
         Probability<UnaryExpr::Op> prob ((UnaryExpr::Op) i, 10);
         allowed_unary_op.push_back (prob);
     }
-    rand_val_gen->shuffle_prob(allowed_unary_op);
+    //rand_val_gen->shuffle_prob(allowed_unary_op);
 
     for (int i = 0; i < BinaryExpr::Op::MaxOp; ++i) {
         Probability<BinaryExpr::Op> prob ((BinaryExpr::Op) i, 10);
         allowed_binary_op.push_back (prob);
     }
-    rand_val_gen->shuffle_prob(allowed_binary_op);
+    //rand_val_gen->shuffle_prob(allowed_binary_op);
 
     Probability<Node::NodeID> decl_gen (Node::NodeID::DECL, 10);
     stmt_gen_prob.push_back (decl_gen);
@@ -244,7 +257,7 @@ void GenPolicy::init_from_config () {
     stmt_gen_prob.push_back (assign_gen);
     Probability<Node::NodeID> if_gen (Node::NodeID::IF, 10);
     stmt_gen_prob.push_back (if_gen);
-    rand_val_gen->shuffle_prob(stmt_gen_prob);
+    //rand_val_gen->shuffle_prob(stmt_gen_prob);
 
     Probability<ArithLeafID> data_leaf (ArithLeafID::Data, 11);
     arith_leaves.push_back (data_leaf);
@@ -258,19 +271,19 @@ void GenPolicy::init_from_config () {
     arith_leaves.push_back (type_cast_leaf);
     Probability<ArithLeafID> cse_leaf (ArithLeafID::CSE, 8);
     arith_leaves.push_back (cse_leaf);
-    rand_val_gen->shuffle_prob(arith_leaves);
+    //rand_val_gen->shuffle_prob(arith_leaves);
 
     Probability<ArithDataID> inp_data (ArithDataID::Inp, 80);
     arith_data_distr.push_back (inp_data);
     Probability<ArithDataID> const_data (ArithDataID::Const, 20);
     arith_data_distr.push_back (const_data);
-    rand_val_gen->shuffle_prob(arith_data_distr);
+    //rand_val_gen->shuffle_prob(arith_data_distr);
 
     Probability<ArithCSEGenID> add_cse (ArithCSEGenID::Add, 20);
     arith_cse_gen.push_back (add_cse);
     Probability<ArithCSEGenID> max_cse_gen (ArithCSEGenID::MAX_CSE_GEN_ID, 80);
     arith_cse_gen.push_back (max_cse_gen);
-    rand_val_gen->shuffle_prob(arith_cse_gen);
+    //rand_val_gen->shuffle_prob(arith_cse_gen);
 
     Probability<ArithSSP::ConstUse> const_branch (ArithSSP::ConstUse::CONST_BRANCH, 5);
     allowed_arith_ssp_const_use.push_back(const_branch);
@@ -278,7 +291,7 @@ void GenPolicy::init_from_config () {
     allowed_arith_ssp_const_use.push_back(half_const);
     Probability<ArithSSP::ConstUse> no_ssp_const_use (ArithSSP::ConstUse::MAX_CONST_USE, 90);
     allowed_arith_ssp_const_use.push_back(no_ssp_const_use);
-    rand_val_gen->shuffle_prob(allowed_arith_ssp_const_use);
+    //rand_val_gen->shuffle_prob(allowed_arith_ssp_const_use);
 
     chosen_arith_ssp_const_use = ArithSSP::ConstUse::MAX_CONST_USE;
 
@@ -296,17 +309,17 @@ void GenPolicy::init_from_config () {
     allowed_arith_ssp_similar_op.push_back(add_mul);
     Probability<ArithSSP::SimilarOp> no_ssp_similar_op (ArithSSP::SimilarOp::MAX_SIMILAR_OP, 70);
     allowed_arith_ssp_similar_op.push_back(no_ssp_similar_op);
-    rand_val_gen->shuffle_prob(allowed_arith_ssp_similar_op);
+    //rand_val_gen->shuffle_prob(allowed_arith_ssp_similar_op);
 
     chosen_arith_ssp_similar_op = ArithSSP::SimilarOp::MAX_SIMILAR_OP;
 
     const_buffer_size = CONST_BUFFER_SIZE;
     new_const_prob.emplace_back(Probability<bool>(true, 50));
     new_const_prob.emplace_back(Probability<bool>(false, 50));
-    rand_val_gen->shuffle_prob(new_const_prob);
+    //rand_val_gen->shuffle_prob(new_const_prob);
     new_const_type_prob.emplace_back(Probability<bool>(true, 50));
     new_const_type_prob.emplace_back(Probability<bool>(false, 50));
-    rand_val_gen->shuffle_prob(new_const_type_prob);
+    //rand_val_gen->shuffle_prob(new_const_type_prob);
     special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Zero, 10));
     special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::One, 10));
     special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Two, 10));
@@ -315,27 +328,27 @@ void GenPolicy::init_from_config () {
     special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Eight, 10));
     special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Sixteen, 10));
     special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::MAX_SPECIAL_CONST, 10));
-    rand_val_gen->shuffle_prob(special_const_prob);
+    //rand_val_gen->shuffle_prob(special_const_prob);
     new_const_kind_prob.emplace_back(Probability<ConstPattern::NewConstKind>(ConstPattern::EndBits, 25));
     new_const_kind_prob.emplace_back(Probability<ConstPattern::NewConstKind>(ConstPattern::BitBlock, 25));
     new_const_kind_prob.emplace_back(Probability<ConstPattern::NewConstKind>(ConstPattern::MAX_NEW_CONST_KIND, 50));
-    rand_val_gen->shuffle_prob(new_const_kind_prob);
+    //rand_val_gen->shuffle_prob(new_const_kind_prob);
     const_transform_prob.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Negate, 33));
     const_transform_prob.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::BitNot, 33));
     const_transform_prob.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Plus, 33));
-    rand_val_gen->shuffle_prob(const_transform_prob);
+    //rand_val_gen->shuffle_prob(const_transform_prob);
 
     Probability<bool> else_exist (true, 50);
     else_prob.push_back(else_exist);
     Probability<bool> no_else (false, 50);
     else_prob.push_back(no_else);
-    rand_val_gen->shuffle_prob(else_prob);
+    //rand_val_gen->shuffle_prob(else_prob);
 
     max_if_depth = MAX_IF_DEPTH;
 
     decl_stmt_gen_id_prob.emplace_back(Probability<GenPolicy::DeclStmtGenID>(GenPolicy::DeclStmtGenID::Variable, 80));
     decl_stmt_gen_id_prob.emplace_back(Probability<GenPolicy::DeclStmtGenID>(GenPolicy::DeclStmtGenID::Pointer, 20));
-    rand_val_gen->shuffle_prob(decl_stmt_gen_id_prob);
+    //rand_val_gen->shuffle_prob(decl_stmt_gen_id_prob);
 
     max_test_complexity = MAX_TEST_COMPLEXITY;
 

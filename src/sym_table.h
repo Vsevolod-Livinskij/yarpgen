@@ -1,3 +1,5 @@
+#include <utility>
+
 /*
 Copyright (c) 2015-2017, Intel Corporation
 
@@ -22,6 +24,7 @@ limitations under the License.
 #include "gen_policy.h"
 #include "variable.h"
 #include "ir_node.h"
+#include "cxx_proto.pb.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -139,6 +142,9 @@ class Context {
     public:
         Context (GenPolicy _gen_policy, std::shared_ptr<Context> _parent_ctx, Node::NodeID _self_stmt_id, bool _taken);
 
+        void set_scope_design(std::shared_ptr<Scope> _scope_des) { scope_des = _scope_des; }
+        std::shared_ptr<Scope> get_scope_design() { return scope_des; }
+
         void set_gen_policy (GenPolicy _gen_policy) { gen_policy = std::make_shared<GenPolicy>(_gen_policy); }
         auto get_gen_policy () { return gen_policy; }
         uint32_t get_depth () { return depth; }
@@ -170,6 +176,8 @@ class Context {
         uint32_t if_depth;
         uint32_t depth;
         bool taken;
+
+        std::shared_ptr<Scope> scope_des;
         //TODO: maybe we should add taken member?
 };
 }
