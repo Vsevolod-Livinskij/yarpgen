@@ -45,7 +45,7 @@ class Program {
         // To get valid test, all of them should be called (the order doesn't matter)
         void emit_func ();
         void emit_decl ();
-        void emit_main ();
+        std::string emit_main ();
 
     private:
 

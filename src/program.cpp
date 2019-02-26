@@ -19,6 +19,8 @@ limitations under the License.
 #include "program.h"
 #include "util.h"
 
+#include <sstream>
+
 ///////////////////////////////////////////////////////////////////////////////
 
 using namespace yarpgen;
@@ -297,9 +299,8 @@ void Program::emit_func () {
     out_file.close();
 }
 
-void Program::emit_main () {
-    std::ofstream out_file;
-    out_file.open(out_folder + "/" + "driver." + get_file_ext());
+std::string Program::emit_main () {
+    std::stringstream out_file;
 
     // Headers
     //////////////////////////////////////////////////////////
@@ -413,6 +414,13 @@ void Program::emit_main () {
     out_file << "    return 0;\n";
     out_file << "}\n";
 
-    out_file.close();
+    std::ofstream out_file_real;
+    out_file_real.open(out_folder + "/" + "driver." + get_file_ext());
+
+    out_file_real << out_file.str();
+
+    out_file_real.close();
+
+    return out_file.str();
 }
 

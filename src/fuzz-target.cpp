@@ -58,7 +58,19 @@ void HandleCXX(const std::string &S,
                           &Diags);
 }
 
-DEFINE_PROTO_FUZZER(const ProgSeed& input) {
-    //auto S = seedToString(input);
-    //HandleCXX(S, std::vector<const char *> {});
+DEFINE_BINARY_PROTO_FUZZER(const ProgSeed& input) {
+    options = new Options;
+
+    std::cout << input.DebugString() << std::endl;
+
+    RandValGen::init(input.base_seed());
+    rand_val_gen = std::make_shared<RandValGen>(RandValGen (0));
+    default_gen_policy.init_from_config();
+
+    Program mas ("/dev/null");
+    mas.generate((yarpgen::ProgSeed *)&input);
+    std::string S = mas.emit_main ();
+
+    HandleCXX(S, std::vector<const char *> {});
+    delete(options);
 }

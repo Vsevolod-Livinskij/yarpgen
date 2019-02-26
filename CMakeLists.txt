@@ -16,7 +16,7 @@
 #
 ###############################################################################
 
-cmake_minimum_required (VERSION 3.6)
+cmake_minimum_required (VERSION 3.13)
 project (YARPGen)
 
 if(NOT DEFINED YARPGEN_VERSION_MAJOR)
