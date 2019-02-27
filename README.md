@@ -35,6 +35,14 @@ The script will run several compilers with several compiler options and run exec
 
 Also you may want to test compilers for future hardware, which is not available to you at the moment. The standard way to do that is to download the [Intel® Software Development Emulator](http://www.intel.com/software/sde). ``run_gen.py`` assumes that it is available in your PATH.
 
+Building fuzzer mode
+--------------------
+It is highly reccomended to use LLVM 7.0.1. Build options: -DLLVM_ENABLE_DUMP=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DLLVM_USE_SANITIZE_COVERAGE=YES -DCLANG_ENABLE_PROTO_FUZZER=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_DUMP=ON -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_INSTALL_UTILS=ON -DLLVM_TARGETS_TO_BUILD=X86
+
+Also you need this commit to fix the build: https://github.com/llvm-mirror/llvm/commit/d91f0329ac6476f5af994e95e5118dd071d3d268#diff-6ff57d2e71c3632a932bbac769d6d63f
+
+TODO: we need -DLLVM_USE_SANITIZER=Address option, but it has a conflict with compiler-rt.
+
 Mailing list
 ------------
 
