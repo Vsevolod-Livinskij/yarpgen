@@ -16,21 +16,49 @@ limitations under the License.
 
 //////////////////////////////////////////////////////////////////////////////
 
+#include <ostream>
+#include <sstream>
+
 #include "clang/CodeGen/CodeGenAction.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/Option/Option.h"
+#include "llvm/InitializePasses.h"
+#include "llvm/PassRegistry.h"
+#include "llvm/Support/TargetSelect.h"
 
 #include "cxx_proto.pb.h"
-#include "program.h"
 
 #include "libfuzzer_macro.h"
 
+#include "program.h"
+
 using namespace yarpgen;
 
+extern "C" int LLVMFuzzerInitialize(int *argc, char ***argv) {
+    llvm::InitializeAllTargets();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllAsmPrinters();
+    llvm::InitializeAllAsmParsers();
+
+    llvm::PassRegistry &Registry = *llvm::PassRegistry::getPassRegistry();
+    llvm::initializeCore(Registry);
+    llvm::initializeScalarOpts(Registry);
+    llvm::initializeVectorization(Registry);
+    llvm::initializeIPO(Registry);
+    llvm::initializeAnalysis(Registry);
+    llvm::initializeTransformUtils(Registry);
+    llvm::initializeInstCombine(Registry);
+    llvm::initializeAggressiveInstCombine(Registry);
+    llvm::initializeInstrumentation(Registry);
+    llvm::initializeTarget(Registry);
+
+    return 0;
+}
+
 void HandleCXX(const std::string &S,
-                             const std::vector<const char *> &ExtraArgs) {
+               const std::vector<const char *> &ExtraArgs) {
     llvm::opt::ArgStringList CC1Args;
     CC1Args.push_back("-cc1");
     for (auto &A : ExtraArgs)
@@ -64,13 +92,12 @@ DEFINE_BINARY_PROTO_FUZZER(const ProgSeed& input) {
     std::cout << input.DebugString() << std::endl;
 
     RandValGen::init(input.base_seed());
-    rand_val_gen = std::make_shared<RandValGen>(RandValGen (0));
+    rand_val_gen = std::make_shared<RandValGen>(RandValGen(0));
     default_gen_policy.init_from_config();
+    Program mas("/dev/null");
+    mas.generate((yarpgen::ProgSeed *) &input);
+    std::string S = mas.emit_main();
 
-    Program mas ("/dev/null");
-    mas.generate((yarpgen::ProgSeed *)&input);
-    std::string S = mas.emit_main ();
-
-    HandleCXX(S, std::vector<const char *> {});
-    delete(options);
+    HandleCXX(S, std::vector<const char *>{});
+    delete (options);
 }

@@ -16,9 +16,7 @@
 #
 ###############################################################################
 
-
 set(LIB_SRCS type.cpp variable.cpp expr.cpp stmt.cpp gen_policy.cpp sym_table.cpp program.cpp options.cpp cxx_proto.pb.cc)
-
 set(SRCS ${LIB_SRCS} main.cpp self-test.cpp)
 
 include(ExternalProject)
@@ -110,12 +108,14 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=gold")
 target_link_libraries(yarpgen-fuzz ${INSTALL_DIR}/lib/libprotobuf-mutator-libfuzzer.a
                                    ${INSTALL_DIR}/lib/libprotobuf-mutator.a
                                    ${Protobuf_LIBRARIES})
-target_link_libraries(yarpgen-fuzz ${llvm_libs} /home/vlivinsk/workspace/llvm/bin-7.0/lib/clang/7.0.1/lib/linux/libclang_rt.fuzzer-x86_64.a
+target_link_libraries(yarpgen-fuzz ${llvm_libs}
+        -fsanitize=fuzzer
         -Wl,--start-group
         -lclangAST
         -lclangASTMatchers
         -lclangAnalysis
         -lclangBasic
+        -lclangCodeGen
         -lclangDriver
         -lclangEdit
         -lclangFrontend
@@ -147,10 +147,6 @@ target_link_libraries(yarpgen-fuzz ${llvm_libs} /home/vlivinsk/workspace/llvm/bi
         -lLLVMOrcJIT
         -lLLVMCoverage
         -lLLVMMIRParser
-        -lLLVMNVPTXCodeGen
-        -lLLVMNVPTXDesc
-        -lLLVMNVPTXInfo
-        -lLLVMNVPTXAsmPrinter
         -lLLVMObjectYAML
         -lLLVMLibDriver
         -lLLVMOption
@@ -196,7 +192,6 @@ target_link_libraries(yarpgen-fuzz ${llvm_libs} /home/vlivinsk/workspace/llvm/bi
         -lLLVMBinaryFormat
         -lLLVMSupport
         -lLLVMDemangle
-        -lclangCodeGen
-        -lasan
+        #-lasan
         -Wl,--end-group
         )
