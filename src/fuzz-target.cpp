@@ -89,8 +89,6 @@ void HandleCXX(const std::string &S,
 DEFINE_BINARY_PROTO_FUZZER(const ProgSeed& input) {
     options = new Options;
 
-    std::cout << input.DebugString() << std::endl;
-
     RandValGen::init(input.base_seed());
     rand_val_gen = std::make_shared<RandValGen>(RandValGen(0));
     default_gen_policy.init_from_config();

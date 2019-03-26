@@ -92,7 +92,7 @@ uint64_t yarpgen::RandValGen::base_seed;
 
 void RandValGen::init(uint64_t _base_seed) {
     base_seed = _base_seed;
-    std::cout << "/*SEED " << options->plane_yarpgen_version << "_" << base_seed << "*/" << std::endl;
+    //std::cout << "/*SEED " << options->plane_yarpgen_version << "_" << base_seed << "*/" << std::endl;
 }
 
 RandValGen::RandValGen (uint64_t subseed) {
