@@ -216,6 +216,11 @@ std::shared_ptr<ConstExpr> ConstExpr::generate (std::shared_ptr<Context> ctx) {
     GenPolicy::add_to_complexity(Node::NodeID::CONST);
     auto p = ctx->get_gen_policy();
 
+    if (options->no_gen_policy) {
+        IntegerType::IntegerTypeID int_type_id = IntegerType::generate(ctx)->get_int_type_id();
+        return std::make_shared<ConstExpr>(BuiltinType::ScalarTypedVal::generate(ctx, int_type_id));
+    }
+
     // Randomly choose if we want to create new constant or somehow reuse the old one
     bool gen_new_const = rand_val_gen->get_rand_id(p->get_new_const_prob());
 
@@ -449,7 +454,7 @@ GenPolicy ArithExpr::choose_and_apply_ssp_const_use (GenPolicy old_gen_policy) {
     if (old_gen_policy.get_chosen_arith_ssp_const_use () != ArithSSP::ConstUse::MAX_CONST_USE)
         return old_gen_policy;
     ArithSSP::ConstUse arith_ssp_const_use_id = rand_val_gen->get_rand_id (old_gen_policy.get_allowed_arith_ssp_const_use());
-//    std::cerr << "arith_single_pattern_id: " << arith_single_pattern_id << std::endl;
+    //    std::cerr << "arith_single_pattern_id: " << arith_single_pattern_id << std::endl;
     return old_gen_policy.apply_arith_ssp_const_use (arith_ssp_const_use_id);
 }
 

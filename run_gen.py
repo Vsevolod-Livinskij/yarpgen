@@ -68,6 +68,8 @@ known_build_fails = { \
     "Killed": "killed"
 }
 
+no_gen_policy = False
+
 ###############################################################################
 
 
@@ -163,6 +165,8 @@ class Test(object):
         # Run generator
         yarpgen_run_list = [".." + os.sep + "yarpgen", "-q",
                             "--std=" + gen_test_makefile.StdID.get_pretty_std_name(gen_test_makefile.selected_standard)]
+        if no_gen_policy:
+            yarpgen_run_list += ["--no-gen-policy"]
         if seed:
             yarpgen_run_list += ["-s", seed]
         self.yarpgen_cmd = " ".join(str(p) for p in yarpgen_run_list)
@@ -1700,7 +1704,11 @@ Use specified folder for testing
                         help="List of testing sets for statistics collection")
     parser.add_argument("--ignore-comp-time-exp", dest="ignore_comp_time_exp", default=True, action="store_true",
                         help="Don't save files (except log-file) when compile time expires")
+    parser.add_argument("--no-gen-policy", dest="no_gen_policy", default=False, action="store_true",
+                        help="Disable generation policies")
     args = parser.parse_args()
+
+    no_gen_policy = args.no_gen_policy
 
     log_level = logging.DEBUG if args.verbose else logging.INFO
     if args.log_file is None:

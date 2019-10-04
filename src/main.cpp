@@ -68,6 +68,7 @@ void print_usage_and_exit (std::string error_msg = "") {
     std::cout << "\t-d, --out-dir=<out-dir>   Output directory\n";
     std::cout << "\t-s, --seed=<seed>         Predefined seed (it is accepted in form of SSS or VV_SSS)\n";
     std::cout << "\t-m, --bit-mode=<32/64>    Generated test's bit mode\n";
+    std::cout << "\t--no-gen-policy           Disable generation policies\n";
     std::cout << "\t--std=<standard>          Generated test's language standard\n";
     auto search_for_default_std = [] (const std::pair<std::string, Options::StandardID> &pair) {
         return pair.second == options->standard_id;
@@ -199,6 +200,9 @@ int main (int argc, char* argv[128]) {
                                            "Seed wasn't specified.")) {}
         else if (parse_long_and_short_args(argc, i, argv, "-m", "--bit-mode", bit_mode_action,
                                            "Can't recognize bit mode:")) {}
+        else if (!strcmp(argv[i], "--no-gen-policy")) {
+            options->no_gen_policy = true;
+        }
         else if (argv[i][0] == '-') {
             print_usage_and_exit("Unknown option: " + std::string(argv[i]));
         }

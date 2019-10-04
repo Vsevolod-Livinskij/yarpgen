@@ -224,7 +224,8 @@ void GenPolicy::init_from_config () {
     min_mix_var_count = MIN_MIX_VAR_COUNT;
     max_mix_var_count = MAX_MIX_VAR_COUNT;
 
-    max_cse_count = MAX_CSE_COUNT;
+
+    max_cse_count = options->no_gen_policy ? 0 : MAX_CSE_COUNT;
 
     for (int i = UnaryExpr::Op::Plus; i < UnaryExpr::Op::MaxOp; ++i) {
         Probability<UnaryExpr::Op> prob ((UnaryExpr::Op) i, 10);
@@ -256,8 +257,10 @@ void GenPolicy::init_from_config () {
     arith_leaves.push_back (cond_leaf);
     Probability<ArithLeafID> type_cast_leaf (ArithLeafID::TypeCast, 11);
     arith_leaves.push_back (type_cast_leaf);
-    Probability<ArithLeafID> cse_leaf (ArithLeafID::CSE, 8);
-    arith_leaves.push_back (cse_leaf);
+    if (!options->no_gen_policy) {
+        Probability<ArithLeafID> cse_leaf(ArithLeafID::CSE, 8);
+        arith_leaves.push_back(cse_leaf);
+    }
     rand_val_gen->shuffle_prob(arith_leaves);
 
     Probability<ArithDataID> inp_data (ArithDataID::Inp, 80);
@@ -266,64 +269,76 @@ void GenPolicy::init_from_config () {
     arith_data_distr.push_back (const_data);
     rand_val_gen->shuffle_prob(arith_data_distr);
 
-    Probability<ArithCSEGenID> add_cse (ArithCSEGenID::Add, 20);
-    arith_cse_gen.push_back (add_cse);
+    if (!options->no_gen_policy) {
+        Probability<ArithCSEGenID> add_cse(ArithCSEGenID::Add, 20);
+        arith_cse_gen.push_back(add_cse);
+    }
     Probability<ArithCSEGenID> max_cse_gen (ArithCSEGenID::MAX_CSE_GEN_ID, 80);
     arith_cse_gen.push_back (max_cse_gen);
     rand_val_gen->shuffle_prob(arith_cse_gen);
 
-    Probability<ArithSSP::ConstUse> const_branch (ArithSSP::ConstUse::CONST_BRANCH, 5);
-    allowed_arith_ssp_const_use.push_back(const_branch);
-    Probability<ArithSSP::ConstUse> half_const (ArithSSP::ConstUse::HALF_CONST, 5);
-    allowed_arith_ssp_const_use.push_back(half_const);
+    if (!options->no_gen_policy) {
+        Probability<ArithSSP::ConstUse> const_branch(ArithSSP::ConstUse::CONST_BRANCH, 5);
+        allowed_arith_ssp_const_use.push_back(const_branch);
+        Probability<ArithSSP::ConstUse> half_const(ArithSSP::ConstUse::HALF_CONST, 5);
+        allowed_arith_ssp_const_use.push_back(half_const);
+    }
     Probability<ArithSSP::ConstUse> no_ssp_const_use (ArithSSP::ConstUse::MAX_CONST_USE, 90);
     allowed_arith_ssp_const_use.push_back(no_ssp_const_use);
     rand_val_gen->shuffle_prob(allowed_arith_ssp_const_use);
 
     chosen_arith_ssp_const_use = ArithSSP::ConstUse::MAX_CONST_USE;
 
-    Probability<ArithSSP::SimilarOp> additive (ArithSSP::SimilarOp::ADDITIVE, 5);
-    allowed_arith_ssp_similar_op.push_back(additive);
-    Probability<ArithSSP::SimilarOp> bitwise (ArithSSP::SimilarOp::BITWISE, 5);
-    allowed_arith_ssp_similar_op.push_back(bitwise);
-    Probability<ArithSSP::SimilarOp> logic (ArithSSP::SimilarOp::LOGIC, 5);
-    allowed_arith_ssp_similar_op.push_back(logic);
-    Probability<ArithSSP::SimilarOp> mul (ArithSSP::SimilarOp::MUL, 5);
-    allowed_arith_ssp_similar_op.push_back(mul);
-    Probability<ArithSSP::SimilarOp> bit_sh (ArithSSP::SimilarOp::BIT_SH, 5);
-    allowed_arith_ssp_similar_op.push_back(bit_sh);
-    Probability<ArithSSP::SimilarOp> add_mul (ArithSSP::SimilarOp::ADD_MUL, 5);
-    allowed_arith_ssp_similar_op.push_back(add_mul);
+    if (!options->no_gen_policy) {
+        Probability<ArithSSP::SimilarOp> additive(ArithSSP::SimilarOp::ADDITIVE, 5);
+        allowed_arith_ssp_similar_op.push_back(additive);
+        Probability<ArithSSP::SimilarOp> bitwise(ArithSSP::SimilarOp::BITWISE, 5);
+        allowed_arith_ssp_similar_op.push_back(bitwise);
+        Probability<ArithSSP::SimilarOp> logic(ArithSSP::SimilarOp::LOGIC, 5);
+        allowed_arith_ssp_similar_op.push_back(logic);
+        Probability<ArithSSP::SimilarOp> mul(ArithSSP::SimilarOp::MUL, 5);
+        allowed_arith_ssp_similar_op.push_back(mul);
+        Probability<ArithSSP::SimilarOp> bit_sh(ArithSSP::SimilarOp::BIT_SH, 5);
+        allowed_arith_ssp_similar_op.push_back(bit_sh);
+        Probability<ArithSSP::SimilarOp> add_mul(ArithSSP::SimilarOp::ADD_MUL, 5);
+        allowed_arith_ssp_similar_op.push_back(add_mul);
+    }
     Probability<ArithSSP::SimilarOp> no_ssp_similar_op (ArithSSP::SimilarOp::MAX_SIMILAR_OP, 70);
     allowed_arith_ssp_similar_op.push_back(no_ssp_similar_op);
     rand_val_gen->shuffle_prob(allowed_arith_ssp_similar_op);
 
     chosen_arith_ssp_similar_op = ArithSSP::SimilarOp::MAX_SIMILAR_OP;
 
-    const_buffer_size = CONST_BUFFER_SIZE;
+    const_buffer_size = options->no_gen_policy ? 0 : CONST_BUFFER_SIZE;
     new_const_prob.emplace_back(Probability<bool>(true, 50));
-    new_const_prob.emplace_back(Probability<bool>(false, 50));
+    if (!options->no_gen_policy) {
+        new_const_prob.emplace_back(Probability<bool>(false, 50));
+    }
     rand_val_gen->shuffle_prob(new_const_prob);
     new_const_type_prob.emplace_back(Probability<bool>(true, 50));
-    new_const_type_prob.emplace_back(Probability<bool>(false, 50));
+    if (!options->no_gen_policy) {
+        new_const_type_prob.emplace_back(Probability<bool>(false, 50));
+    }
     rand_val_gen->shuffle_prob(new_const_type_prob);
-    special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Zero, 10));
-    special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::One, 10));
-    special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Two, 10));
-    special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Three, 10));
-    special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Four, 10));
-    special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Eight, 10));
-    special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Sixteen, 10));
-    special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::MAX_SPECIAL_CONST, 10));
-    rand_val_gen->shuffle_prob(special_const_prob);
-    new_const_kind_prob.emplace_back(Probability<ConstPattern::NewConstKind>(ConstPattern::EndBits, 25));
-    new_const_kind_prob.emplace_back(Probability<ConstPattern::NewConstKind>(ConstPattern::BitBlock, 25));
-    new_const_kind_prob.emplace_back(Probability<ConstPattern::NewConstKind>(ConstPattern::MAX_NEW_CONST_KIND, 50));
-    rand_val_gen->shuffle_prob(new_const_kind_prob);
-    const_transform_prob.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Negate, 33));
-    const_transform_prob.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::BitNot, 33));
-    const_transform_prob.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Plus, 33));
-    rand_val_gen->shuffle_prob(const_transform_prob);
+    if (!options->no_gen_policy) {
+        special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Zero, 10));
+        special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::One, 10));
+        special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Two, 10));
+        special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Three, 10));
+        special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Four, 10));
+        special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Eight, 10));
+        special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::Sixteen, 10));
+        special_const_prob.emplace_back(Probability<ConstPattern::SpecialConst>(ConstPattern::MAX_SPECIAL_CONST, 10));
+        rand_val_gen->shuffle_prob(special_const_prob);
+        new_const_kind_prob.emplace_back(Probability<ConstPattern::NewConstKind>(ConstPattern::EndBits, 25));
+        new_const_kind_prob.emplace_back(Probability<ConstPattern::NewConstKind>(ConstPattern::BitBlock, 25));
+        new_const_kind_prob.emplace_back(Probability<ConstPattern::NewConstKind>(ConstPattern::MAX_NEW_CONST_KIND, 50));
+        rand_val_gen->shuffle_prob(new_const_kind_prob);
+        const_transform_prob.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Negate, 33));
+        const_transform_prob.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::BitNot, 33));
+        const_transform_prob.emplace_back(Probability<UnaryExpr::Op>(UnaryExpr::Op::Plus, 33));
+        rand_val_gen->shuffle_prob(const_transform_prob);
+    }
 
     Probability<bool> else_exist (true, 50);
     else_prob.push_back(else_exist);

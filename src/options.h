@@ -54,6 +54,7 @@ struct Options {
     bool include_valarray;
     bool include_vector;
     bool include_array;
+    bool no_gen_policy;
 };
 
 extern Options *options;
