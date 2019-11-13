@@ -47,8 +47,8 @@ creduce_n = 0
 clang_total_stmt_str = "stmts/expr"
 
 yarpgen_timeout = 60
-compiler_timeout = 1200
-run_timeout = 300
+compiler_timeout = 120
+run_timeout = 60
 stat_update_delay = 10
 tmp_cleanup_delay = 3600
 creduce_timeout = 3600 * 24
@@ -60,38 +60,6 @@ compiler_mem_limit = 10000000 # 10 Gb
 script_start_time = datetime.datetime.now()  # We should init variable, so let's do it this way
 
 known_build_fails = { \
-# clang
-    "Assertion `NodeToMatch\-\>getOpcode\(\) != ISD::DELETED_NODE && \"NodeToMatch was removed partway through selection\"'": "SelectionDAGISel", \
-    "replaceAllUses of value with new value of different type": "replaceAllUses", \
-    "Concatenation of vectors with inconsistent value types": "FoldCONCAT_VECTORS", \
-    "Integer type overpromoted": "PromoteIntRes_SETCC", \
-    "Cannot select.*urem": "Cannot_select_urem", \
-    "Cannot select.*X86ISD::PCMPEQ": "Cannot_select_pcmpeq", \
-    "Binary operator types must match": "Binary_operator_types_must_match", \
-    "Deleted Node added to Worklist": "DAGCombiner_AddToWorklist", \
-    "Invalid child # of SDNode": "SDNode_getOperand", \
-    "DELETED_NODE in CSEMap!": "DELETED_NODE_CSEMap", \
-    "The number of nodes scheduled doesn't match the expected number": "VerifyScheduledSequence", \
-    "Cannot emit physreg copy instruction": "physreg_copy", \
-    "Deleted edge still exists in the CFG": "deleted_cfg_edge", \
-    "Cannot convert from scalar to/from vector": "vec_convert", \
-    "Invalid constantexpr cast!": "constexpr_cast", \
-# gcc
-    "compute_live_loop_exits": "compute_live_loop_exits", \
-    "ubsan_instrument_division": "ubsan_instrument_division", \
-    "non-trivial conversion at assignment": "verify_gimple_assignment", \
-    "type mismatch in shift expression": "verify_gimple_shift", \
-    "type mismatch in binary expression": "verify_gimple_binary", \
-    "REG_BR_PROB does not match": "REG_BR_PROB", \
-    "in build_low_bits_mask": "build_low_bits_mask", \
-    "non-trivial conversion in unary operation": "verify_gimple_conversion_in_unary", \
-    "conversion of register to a different size": "verify_gimple_register_size", \
-    "in decompose": "decompose", \
-    "mismatching comparison operand types": "verify_gimple_unary_conversion", \
-    "qsort checking failed": "qsort", \
-    "in immed_wide_int_const, at emit-rtl.c": "immed_wide_int_const", \
-    "during RTL pass: cprop": "cprop", \
-    "may be used uninitialized in this function": "may_be_uninit", \
 # problem with available memory
     "bad_alloc": "memory_problem", \
     "out of memory": "memory_problem", \
