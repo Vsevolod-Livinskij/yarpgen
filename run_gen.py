@@ -882,7 +882,7 @@ class TestRun(object):
                     regex = re.compile("func\.cpp\..")
                     files = os.listdir(".")
                     for act_file in files:
-                        if regex.match(act_file) and act_file.endswith(".statistics"):
+                        if regex.search(act_file) and act_file.endswith(".statistics"):
                             gcc_stats_file = act_file
                 if os.path.isfile(gcc_stats_file):
                     opt_stats = StatsParser.parse_gcc_opt_stats_file(gcc_stats_file)
