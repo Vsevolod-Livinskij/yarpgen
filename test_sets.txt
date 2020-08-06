@@ -56,7 +56,7 @@ ubsan_gcc_o0     | ubsan_gcc   | -O0       |                |
 #ubsan_gcc_o2     | ubsan_gcc   | -O2       |                |
 
 #gcc_no_opt       | gcc       | -O0       |                |
-#gcc_opt          | gcc       | -O3       |                |
+gcc_opt          | gcc       | -O3       |                |
 #gcc_wsm_opt      | gcc       | -O3       | westmere       | wsm
 #gcc_ivb_opt      | gcc       | -O3       | ivybridge      | ivb
 #gcc_hsw_opt      | gcc       | -O3       | haswell        | hsw
