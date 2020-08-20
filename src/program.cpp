@@ -87,6 +87,8 @@ static void emitVarsDecl(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
 static void emitArrayDecl(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
                           std::vector<std::shared_ptr<Array>> arrays) {
     Options &options = Options::getInstance();
+    if (options.isSYCL())
+        ctx->setSYCLPrefix("app_");
     for (auto &array : arrays) {
         if (!options.getAllowDeadData() && array->getIsDead())
             continue;
@@ -103,10 +105,15 @@ static void emitArrayDecl(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
                    << ")))";
         stream << ";\n";
     }
+    ctx->setSYCLPrefix("");
 }
 
 void ProgramGenerator::emitDecl(std::shared_ptr<EmitCtx> ctx,
                                 std::ostream &stream) {
+    Options &options = Options::getInstance();
+    if (options.isSYCL())
+        stream << "unsigned int len = 32;\n\n";
+
     emitVarsDecl(ctx, stream, ext_inp_sym_tbl->getVars());
     emitVarsDecl(ctx, stream, ext_out_sym_tbl->getVars());
 
@@ -117,6 +124,8 @@ void ProgramGenerator::emitDecl(std::shared_ptr<EmitCtx> ctx,
 static void emitArrayInit(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
                           std::vector<std::shared_ptr<Array>> arrays) {
     Options &options = Options::getInstance();
+    if (options.isSYCL())
+        ctx->setSYCLPrefix("app_");
     for (const auto &array : arrays) {
         if (!options.getAllowDeadData() && array->getIsDead())
             continue;
@@ -144,6 +153,7 @@ static void emitArrayInit(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
         init_const->emit(ctx, stream);
         stream << ";\n";
     }
+    ctx->setSYCLPrefix("app_");
 }
 
 void ProgramGenerator::emitInit(std::shared_ptr<EmitCtx> ctx,
@@ -185,8 +195,6 @@ void ProgramGenerator::emitCheck(std::shared_ptr<EmitCtx> ctx,
             stream << ");\n";
         }
     }
-
-    ctx->setSYCLPrefix("");
 
     for (const auto &array : ext_out_sym_tbl->getArrays()) {
         std::string offset = "    ";
@@ -237,6 +245,8 @@ void ProgramGenerator::emitCheck(std::shared_ptr<EmitCtx> ctx,
         stream << ");\n";
     }
     stream << "}\n";
+
+    ctx->setSYCLPrefix("");
 }
 
 // This buffer tracks what input data we pass as a parameters to test functions
@@ -281,6 +291,8 @@ static void emitArrayExtDecl(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
                              bool inp_category) {
     auto emit_pol = ctx->getEmitPolicy();
     Options &options = Options::getInstance();
+    if (options.isSYCL())
+        ctx->setSYCLPrefix("app_");
     for (auto &array : arrays) {
         if (!options.getAllowDeadData() && array->getIsDead())
             continue;
@@ -342,6 +354,7 @@ static void emitArrayExtDecl(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
 
         stream << ";\n";
     }
+    ctx->setSYCLPrefix("");
 }
 
 void ProgramGenerator::emitExtDecl(std::shared_ptr<EmitCtx> ctx,
@@ -349,6 +362,8 @@ void ProgramGenerator::emitExtDecl(std::shared_ptr<EmitCtx> ctx,
     Options &options = Options::getInstance();
     if (options.isISPC())
         ctx->setIspcTypes(true);
+    if (options.isSYCL())
+        stream << "extern unsigned int len;\n\n";
     emitVarExtDecl(ctx, stream, ext_inp_sym_tbl->getVars(), true);
     emitVarExtDecl(ctx, stream, ext_out_sym_tbl->getVars(), false);
     emitArrayExtDecl(ctx, stream, ext_inp_sym_tbl->getArrays(), true);
@@ -388,6 +403,8 @@ static void emitArrayFuncParam(std::shared_ptr<EmitCtx> ctx,
                                bool emit_type, bool ispc_type, bool emit_dims) {
     bool first = true;
     Options &options = Options::getInstance();
+    if (options.isSYCL())
+        ctx->setSYCLPrefix("app_");
     for (auto &array : arrays) {
         if (!options.getAllowDeadData() && array->getIsDead())
             continue;
@@ -408,11 +425,12 @@ static void emitArrayFuncParam(std::shared_ptr<EmitCtx> ctx,
 
         first = false;
     }
+    ctx->setSYCLPrefix("");
 }
 
-void emitSYCLBuffers(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
-                     std::string offset,
-                     std::vector<std::shared_ptr<ScalarVar>> vars) {
+void emitSYCLBuffersVars(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
+                         std::string offset,
+                         std::vector<std::shared_ptr<ScalarVar>> vars) {
     Options &options = Options::getInstance();
     for (auto &var : vars) {
         if (!options.getAllowDeadData() && var->getIsDead())
@@ -424,16 +442,59 @@ void emitSYCLBuffers(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
     }
 }
 
-void emitSYCLAccessors(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
-                       std::string offset,
-                       std::vector<std::shared_ptr<ScalarVar>> vars,
-                       bool is_inp) {
+void emitSYCLBuffersArrays(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
+                           std::string offset,
+                           std::vector<std::shared_ptr<Array>> arrays) {
+    Options &options = Options::getInstance();
+    for (auto &arr : arrays) {
+        if (!options.getAllowDeadData() && arr->getIsDead())
+            continue;
+
+        auto arr_type = std::static_pointer_cast<ArrayType>(arr->getType());
+        auto &dims = arr_type->getDimensions();
+
+        stream << offset << "buffer<";
+        stream << arr_type->getBaseType()->getName(ctx);
+        stream << ", ";
+        stream << dims.size();
+        stream << "> " << arr->getName(ctx) << "_buf { (";
+        stream << arr_type->getBaseType()->getName(ctx) << "*) ";
+        stream << "app_" << arr->getName(ctx) << ", range<";
+        stream << arr_type->getDimensions().size();
+        stream << ">(";
+        for (auto i = dims.begin(); i != dims.end(); ++i) {
+            stream << (*i);
+            if (i != dims.end() - 1)
+                stream << ", ";
+        }
+        stream << ") };\n";
+    }
+}
+
+void emitSYCLAccessorsVars(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
+                           std::string offset,
+                           std::vector<std::shared_ptr<ScalarVar>> vars,
+                           bool is_inp) {
     Options &options = Options::getInstance();
     for (auto &var : vars) {
         if (!options.getAllowDeadData() && var->getIsDead())
             continue;
         stream << offset << "auto " << var->getName(ctx) << " = ";
         stream << var->getName(ctx) << "_buf.get_access<access::mode::";
+        stream << (is_inp ? "read" : "write") << ">(cgh);\n";
+    }
+}
+
+void emitSYCLAccessorsArrays(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
+                             std::string offset,
+                             std::vector<std::shared_ptr<Array>> arrays,
+                             bool is_inp) {
+    Options &options = Options::getInstance();
+    for (auto &arr : arrays) {
+        if (!options.getAllowDeadData() && arr->getIsDead())
+            continue;
+        stream << offset << "auto " << arr->getName(ctx) << " = ";
+        stream << arr->getName(ctx) << "_buf.get_access<access::mode::";
         stream << (is_inp ? "read" : "write") << ">(cgh);\n";
     }
 }
@@ -482,15 +543,27 @@ void ProgramGenerator::emitTest(std::shared_ptr<EmitCtx> ctx,
         stream << "        default_selector selector;\n";
         stream << "#endif\n";
         stream << "        queue myQueue(selector);\n";
-        emitSYCLBuffers(ctx, stream, "        ", ext_inp_sym_tbl->getVars());
-        emitSYCLBuffers(ctx, stream, "        ", ext_out_sym_tbl->getVars());
+        emitSYCLBuffersVars(ctx, stream, "        ",
+                            ext_inp_sym_tbl->getVars());
+        emitSYCLBuffersVars(ctx, stream, "        ",
+                            ext_out_sym_tbl->getVars());
+        emitSYCLBuffersArrays(ctx, stream, "        ",
+                              ext_inp_sym_tbl->getArrays());
+        emitSYCLBuffersArrays(ctx, stream, "        ",
+                              ext_out_sym_tbl->getArrays());
 
         stream << "        myQueue.submit([&](handler & cgh) {\n";
-        emitSYCLAccessors(ctx, stream, "            ",
-                          ext_inp_sym_tbl->getVars(), true);
-        emitSYCLAccessors(ctx, stream, "            ",
-                          ext_out_sym_tbl->getVars(), false);
-        stream << "            cgh.single_task<class test_func>([=] ()\n";
+        emitSYCLAccessorsVars(ctx, stream, "            ",
+                              ext_inp_sym_tbl->getVars(), true);
+        emitSYCLAccessorsVars(ctx, stream, "            ",
+                              ext_out_sym_tbl->getVars(), false);
+        emitSYCLAccessorsArrays(ctx, stream, "            ",
+                                ext_inp_sym_tbl->getArrays(), true);
+        emitSYCLAccessorsArrays(ctx, stream, "            ",
+                                ext_out_sym_tbl->getArrays(), false);
+        // stream << "            cgh.single_task<class test_func>([=] ()\n";
+        stream << "            cgh.parallel_for<class "
+                  "test_func>(range<1>{len}, [=] (id<1> i_0)\n";
     }
 
     if (options.isSYCL())

@@ -47,10 +47,7 @@ std::string ScalarVar::getName(std::shared_ptr<EmitCtx> ctx) {
     if (!ctx)
         ERROR("Can't give a name without a context");
 
-    std::string ret;
-    if (!ctx->getSYCLPrefix().empty())
-        ret = ctx->getSYCLPrefix();
-    ret += Data::getName(ctx);
+    std::string ret = Data::getName(ctx);
     if (ctx->useSYCLAccess())
         ret += "[0]";
     return ret;
@@ -129,9 +126,14 @@ std::shared_ptr<Iterator> Iterator::create(std::shared_ptr<GenCtx> ctx,
                                            bool is_uniform) {
     // TODO: this function is full of magic constants and weird hacks to cut
     //  some corners for ISPC and overflows
+    Options &options = Options::getInstance();
+
     auto gen_pol = ctx->getGenPolicy();
 
     IntTypeID type_id = rand_val_gen->getRandId(gen_pol->int_type_distr);
+    if (options.isSYCL() && ctx->getIfElseDepth() == 0 &&
+        ctx->getLoopDepth() == 0)
+        type_id = IntTypeID::INT;
     std::shared_ptr<Type> type = IntegralType::init(type_id);
     if (!is_uniform)
         type = type->makeVarying();
@@ -149,10 +151,18 @@ std::shared_ptr<Iterator> Iterator::create(std::shared_ptr<GenCtx> ctx,
     // array boundaries
     if (!is_uniform)
         end_val = (end_val / 64) * 64;
+    if (options.isSYCL() && ctx->getIfElseDepth() == 0 &&
+        ctx->getLoopDepth() == 0)
+        end_val = 32;
     auto end =
         std::make_shared<ConstantExpr>(IRValue(type_id, {false, end_val}));
 
     size_t step_val = rand_val_gen->getRandId(gen_pol->iters_step_distr);
+
+    if (options.isSYCL() && ctx->getIfElseDepth() == 0 &&
+        ctx->getLoopDepth() == 0)
+        step_val = 1;
+
     if (!is_uniform)
         step_val = 1;
     // We can't overflow uncontrollably
@@ -248,6 +258,9 @@ void Iterator::populate(std::shared_ptr<PopulateCtx> ctx) {
     auto gen_pol = ctx->getGenPolicy();
 
     Options &options = Options::getInstance();
+    if (options.isSYCL() && ctx->getIfElseDepth() == 0 &&
+        ctx->getLoopDepth() == 0)
+        return;
 
     auto populate_impl =
         [&ctx, &gen_pol,
@@ -322,4 +335,13 @@ void Iterator::populate(std::shared_ptr<PopulateCtx> ctx) {
     start = populate_impl(type, start);
     end = populate_impl(type, end);
     step = populate_impl(type, step);
+}
+
+std::string Data::getName(std::shared_ptr<EmitCtx> ctx) {
+    if (!ctx)
+        ERROR("Can't give a name without a context");
+
+    std::string ret;
+    ret = ctx->getSYCLPrefix() + name;
+    return ret;
 }

@@ -41,7 +41,10 @@ GenPolicy::GenPolicy() {
     loop_nest_depth_lim = 3;
     uniformProbFromMax(loop_nest_depth_distr, loop_nest_depth_lim, 2);
 
-    loop_depth_limit = 5;
+    if (options.isSYCL())
+        loop_depth_limit = 3;
+    else
+        loop_depth_limit = 5;
 
     if_else_depth_limit = 5;
 
@@ -60,12 +63,10 @@ GenPolicy::GenPolicy() {
     iters_step_distr.emplace_back(Probability<size_t>{2, 10});
     iters_step_distr.emplace_back(Probability<size_t>{4, 10});
 
-    if (!options.isSYCL()) {
-        stmt_kind_struct_distr.emplace_back(
-            Probability<IRNodeKind>{IRNodeKind::LOOP_SEQ, 10});
-        stmt_kind_struct_distr.emplace_back(
-            Probability<IRNodeKind>{IRNodeKind::LOOP_NEST, 10});
-    }
+    stmt_kind_struct_distr.emplace_back(
+        Probability<IRNodeKind>{IRNodeKind::LOOP_SEQ, 10});
+    stmt_kind_struct_distr.emplace_back(
+        Probability<IRNodeKind>{IRNodeKind::LOOP_NEST, 10});
     stmt_kind_struct_distr.emplace_back(
         Probability<IRNodeKind>{IRNodeKind::IF_ELSE, 10});
     stmt_kind_struct_distr.emplace_back(
@@ -97,7 +98,8 @@ GenPolicy::GenPolicy() {
     max_new_arr_num = 4;
     uniformProbFromMax(new_arr_num_distr, max_new_arr_num, min_new_arr_num);
 
-    out_kind_distr.emplace_back(Probability<DataKind>(DataKind::VAR, 20));
+    if (!options.isSYCL())
+        out_kind_distr.emplace_back(Probability<DataKind>(DataKind::VAR, 20));
     out_kind_distr.emplace_back(Probability<DataKind>(DataKind::ARR, 20));
     shuffleProbProxy(out_kind_distr);
 

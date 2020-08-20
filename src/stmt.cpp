@@ -66,10 +66,18 @@ void StmtBlock::emit(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
 
 std::shared_ptr<StmtBlock>
 StmtBlock::generateStructure(std::shared_ptr<GenCtx> ctx) {
+    Options &options = Options::getInstance();
+
+    bool sycl_first_loop = options.isSYCL() && ctx->getIfElseDepth() == 0 &&
+                           ctx->getLoopDepth() == 0;
+
     std::vector<std::shared_ptr<Stmt>> stmts;
 
     auto gen_policy = ctx->getGenPolicy();
     size_t stmt_num = rand_val_gen->getRandId(gen_policy->scope_stmt_num_distr);
+    if (sycl_first_loop)
+        stmt_num = 1;
+
     stmts.reserve(stmt_num);
 
     Statistics &stats = Statistics::getInstance();
@@ -78,6 +86,9 @@ StmtBlock::generateStructure(std::shared_ptr<GenCtx> ctx) {
     for (size_t i = 0; i < stmt_num; ++i) {
         IRNodeKind stmt_kind =
             rand_val_gen->getRandId(gen_policy->stmt_kind_struct_distr);
+
+        if (sycl_first_loop)
+            stmt_kind = IRNodeKind::LOOP_NEST;
 
         bool fallback = false;
         // Last stmt that we can fit
@@ -165,6 +176,11 @@ void LoopHead::emitPrefix(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
 
 void LoopHead::emitHeader(std::shared_ptr<EmitCtx> ctx, std::ostream &stream,
                           std::string offset) {
+    Options &options = Options::getInstance();
+    if (options.isSYCL() && iters.size() == 1 &&
+        iters.front()->getName(ctx) == "i_0")
+        return;
+
     if (!pragmas.empty()) {
         for (auto &pragma : pragmas) {
             pragma->emit(ctx, stream, offset);

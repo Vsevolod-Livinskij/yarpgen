@@ -37,7 +37,7 @@ class Data {
           ub_code(UBKind::Uninit), is_dead(true), alignment(0) {}
     virtual ~Data() = default;
 
-    virtual std::string getName(std::shared_ptr<EmitCtx> ctx) { return name; }
+    virtual std::string getName(std::shared_ptr<EmitCtx> ctx);
     void setName(std::string _name) { name = std::move(_name); }
     std::shared_ptr<Type> getType() { return type; }
 
